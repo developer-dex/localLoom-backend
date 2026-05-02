@@ -1,0 +1,216 @@
+---
+description: LocalLoom Backend — Architecture & Code Standards
+globs: src/**/*.ts
+alwaysApply: true
+---
+
+# LocalLoom Backend — Architecture & Code Standards
+
+## Architecture Overview
+
+This backend follows a **Modular Layered Architecture** with strict separation of concerns:
+
+```
+Request → Route → Middleware → Controller → Service → Repository → Model → Database
+```
+
+Every feature lives in `src/modules/<feature>/` and MUST contain these files:
+- `<feature>.interface.ts` — DTOs, type definitions
+- `<feature>.validation.ts` — Joi schemas for request validation
+- `<feature>.controller.ts` — HTTP request handlers (thin layer, delegates to service)
+- `<feature>.service.ts` — Business logic (the brains)
+- `<feature>.repository.ts` — Database queries (the data layer)
+- `<feature>.routes.ts` — Express router with middleware chain
+- `<feature>.swagger.ts` — OpenAPI/Swagger JSDoc annotations
+- `index.ts` — Barrel export
+
+## Rules for Each Layer
+
+### Controller Rules
+- Controllers MUST be classes with methods assigned as arrow functions for correct `this` binding
+- Controllers MUST NOT contain business logic — delegate to the service
+- ALWAYS use the `asyncHandler` wrapper for async route handlers
+- ALWAYS use `ApiResponse` for consistent JSON responses
+- ALWAYS cast `req` to `AuthenticatedRequest` when accessing `req.user`
+- Follow this exact pattern:
+
+```typescript
+import { Request, Response } from 'express';
+import { FeatureService } from './feature.service';
+import { ApiResponse, asyncHandler } from '../../common/utils';
+import { AuthenticatedRequest } from '../../common/interfaces';
+
+export class FeatureController {
+  private featureService: FeatureService;
+
+  constructor() {
+    this.featureService = new FeatureService();
+  }
+
+  getSomething = asyncHandler(async (req: Request, res: Response) => {
+    const result = await this.featureService.getSomething(req.params.id);
+    ApiResponse.success(res, result, 'Fetched successfully');
+  });
+}
+```
+
+### Service Rules
+- Services contain ALL business logic
+- Services call repositories for data operations — NEVER call models directly
+- Services throw typed exceptions from `common/exceptions/`
+- Services MUST NOT access `req`, `res`, or any Express types
+- Use descriptive error messages from `common/constants/messages.ts`
+
+```typescript
+import { FeatureRepository } from './feature.repository';
+import { NotFoundException } from '../../common/exceptions';
+
+export class FeatureService {
+  private featureRepository: FeatureRepository;
+
+  constructor() {
+    this.featureRepository = new FeatureRepository();
+  }
+
+  async getSomething(id: string): Promise<IFeature> {
+    const result = await this.featureRepository.findById(id);
+    if (!result) {
+      throw new NotFoundException('Feature not found');
+    }
+    return result;
+  }
+}
+```
+
+### Repository Rules
+- Repositories are the ONLY layer that interacts with Mongoose models
+- Return plain documents, not query builders
+- Use `.exec()` on all queries
+- Handle pagination using the shared `buildPaginationMeta` utility
+- NEVER throw HTTP exceptions — return `null` and let the service handle it
+
+```typescript
+import { Model, IModel } from '../../models';
+
+export class FeatureRepository {
+  async findById(id: string): Promise<IModel | null> {
+    return Model.findById(id).exec();
+  }
+}
+```
+
+### Route Rules
+- Define routes in a dedicated `<feature>.routes.ts` file
+- Apply middleware in this order: `authenticate → authorize → validate → controller`
+- Group public routes before the `router.use(authenticate)` barrier
+- Use the `validate` middleware with Joi schemas from `<feature>.validation.ts`
+
+```typescript
+import { Router } from 'express';
+import { FeatureController } from './feature.controller';
+import { authenticate, authorize, validate } from '../../middleware';
+import { createSchema, updateSchema, idParamSchema } from './feature.validation';
+
+const router = Router();
+const controller = new FeatureController();
+
+// Public routes (if any)
+
+router.use(authenticate as any);
+
+// Protected routes
+router.get('/', controller.getAll);
+router.get('/:id', validate(idParamSchema, 'params'), controller.getById);
+router.post('/', validate(createSchema), controller.create);
+router.patch('/:id', validate(idParamSchema, 'params'), validate(updateSchema), controller.update);
+router.delete('/:id', validate(idParamSchema, 'params'), controller.delete);
+
+export default router;
+```
+
+### Validation Rules
+- Use Joi for all input validation
+- Define separate schemas for create, update, params, and query
+- Use `.trim()`, `.lowercase()` where appropriate
+- ObjectId params: `Joi.string().hex().length(24).required()`
+
+### Interface / DTO Rules
+- Define DTOs for every request body
+- Define filter/query interfaces for list endpoints
+- Never use `any` — define proper types
+- Export all types from the module's `index.ts`
+
+## Model Rules
+- Models live in `src/models/` (shared across modules)
+- Always define a TypeScript interface extending `Document`
+- Use proper Mongoose schema options: `timestamps: true`, `toJSON` transforms
+- Add indexes for fields used in queries
+- Hash passwords in `pre('save')` hooks — never in the service
+
+## Error Handling
+- Use typed exceptions from `src/common/exceptions/`:
+  - `BadRequestException` (400)
+  - `UnauthorizedException` (401)
+  - `ForbiddenException` (403)
+  - `NotFoundException` (404)
+  - `ConflictException` (409)
+  - `TooManyRequestsException` (429)
+  - `InternalServerException` (500)
+- NEVER use `res.status().json()` in services — throw exceptions instead
+- The global `errorHandler` middleware catches everything
+
+## API Response Format
+ALL endpoints MUST return this JSON structure:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Descriptive message",
+  "data": { ... },
+  "meta": { "page": 1, "limit": 20, "total": 100, "totalPages": 5, "hasNextPage": true, "hasPrevPage": false }
+}
+```
+
+Use `ApiResponse.success()`, `ApiResponse.created()`, `ApiResponse.paginated()`, or `ApiResponse.error()`.
+
+## Socket.IO Rules
+- Socket handlers live in `src/socket/handlers/`
+- Each handler is a function that receives `(io, socket)` and registers events
+- Use `AuthenticatedSocket` type — never raw `Socket`
+- Socket events use namespace pattern: `domain:action` (e.g., `chat:send-message`)
+- Always authenticate via `socketAuthMiddleware`
+- Use rooms for conversations: `conversation:<id>` and user-specific: `user:<id>`
+
+## Adding a New Module — Checklist
+1. Create folder: `src/modules/<name>/`
+2. Create all 8 files following the patterns above
+3. Add model to `src/models/` if new collection needed
+4. Register routes in `src/routes/v1/index.ts` (or `src/routes/admin/index.ts` for admin)
+5. Add constants to `src/common/constants/messages.ts`
+6. Add enums to `src/common/enums/` if needed
+7. Write Swagger annotations in `<name>.swagger.ts`
+
+## File Naming Conventions
+- All files: `kebab-case` or `feature.purpose.ts`
+- Module files: `<module>.<purpose>.ts` (e.g., `auth.controller.ts`)
+- Middleware: `<name>.middleware.ts`
+- Models: `<name>.model.ts`
+- Enums: `<name>.enum.ts`
+- Interfaces: `<name>.interface.ts`
+
+## Import Order
+1. Node.js built-in modules
+2. Third-party packages
+3. Config imports (`@config/`)
+4. Sibling module imports (relative `./`)
+5. Common utilities, interfaces, exceptions
+6. Types (import type)
+
+## General TypeScript Rules
+- Strict mode enabled — no implicit `any`
+- Use `interface` for object shapes, `type` for unions/intersections
+- Prefer `const` over `let`, never use `var`
+- Use optional chaining (`?.`) and nullish coalescing (`??`)
+- Return early to avoid deep nesting
+- No magic numbers — use constants

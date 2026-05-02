@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env
+*.log
+logs
+uploads
+coverage
+.nyc_output
+*.md
+.vscode
+.cursor
