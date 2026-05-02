@@ -12,9 +12,6 @@
  *     summary: Admin login
  *     operationId: adminLogin
  *     tags: [Admin Auth]
- *     servers:
- *       - url: http://localhost:5000/api/admin/auth
- *         description: Admin Auth API
  *     requestBody:
  *       required: true
  *       content:
@@ -93,9 +90,6 @@
  *     summary: Refresh admin access token
  *     operationId: adminRefreshToken
  *     tags: [Admin Auth]
- *     servers:
- *       - url: http://localhost:5000/api/admin/auth
- *         description: Admin Auth API
  *     requestBody:
  *       required: true
  *       content:
@@ -144,9 +138,6 @@
  *     summary: Admin logout
  *     operationId: adminLogout
  *     tags: [Admin Auth]
- *     servers:
- *       - url: http://localhost:5000/api/admin/auth
- *         description: Admin Auth API
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -181,9 +172,6 @@
  *     summary: Get admin profile
  *     operationId: adminGetProfile
  *     tags: [Admin Auth]
- *     servers:
- *       - url: http://localhost:5000/api/admin/auth
- *         description: Admin Auth API
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -240,9 +228,6 @@
  *     summary: Change admin password
  *     operationId: adminChangePassword
  *     tags: [Admin Auth]
- *     servers:
- *       - url: http://localhost:5000/api/admin/auth
- *         description: Admin Auth API
  *     security:
  *       - bearerAuth: []
  *     requestBody:
