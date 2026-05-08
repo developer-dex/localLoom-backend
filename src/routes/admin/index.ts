@@ -6,7 +6,10 @@ import { authenticateAdmin } from '../../middleware';
 
 const router = Router();
 
+// Mount auth routes at both /auth/* and directly at /* so that
+// /api/admin/auth/login and /api/admin/login both work
 router.use('/auth', adminAuthRoutes);
+router.use('/', adminAuthRoutes);
 
 // All routes below require admin authentication
 router.use(authenticateAdmin as unknown as RequestHandler);
@@ -15,3 +18,4 @@ router.use('/categories', adminCategoriesRoutes);
 router.use('/regions', adminRegionsRoutes);
 
 export default router;
+  

@@ -7,7 +7,7 @@
 
 /**
  * @swagger
- * /login:
+ * /auth/login:
  *   post:
  *     summary: Admin login
  *     operationId: adminLogin
@@ -85,7 +85,7 @@
 
 /**
  * @swagger
- * /refresh-token:
+ * /auth/refresh-token:
  *   post:
  *     summary: Refresh admin access token
  *     operationId: adminRefreshToken
@@ -133,7 +133,7 @@
 
 /**
  * @swagger
- * /logout:
+ * /auth/logout:
  *   post:
  *     summary: Admin logout
  *     operationId: adminLogout
@@ -167,7 +167,7 @@
 
 /**
  * @swagger
- * /profile:
+ * /auth/profile:
  *   get:
  *     summary: Get admin profile
  *     operationId: adminGetProfile
@@ -223,7 +223,7 @@
 
 /**
  * @swagger
- * /change-password:
+ * /auth/change-password:
  *   patch:
  *     summary: Change admin password
  *     operationId: adminChangePassword
