@@ -4,6 +4,7 @@ import { ApiResponse, asyncHandler } from '../../common/utils';
 import { AuthenticatedRequest } from '../../common/interfaces';
 import { USER_MESSAGES } from '../../common/constants';
 import { UpdateUserDto } from './user.interface';
+import { env } from '../../config/env';
 
 export class UserController {
   private userService: UserService;
@@ -15,7 +16,11 @@ export class UserController {
   getMe = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = (req as AuthenticatedRequest).user;
     const user = await this.userService.getMe(userId);
-    ApiResponse.success(res, user, USER_MESSAGES.FETCHED);
+    const data = {
+      ...user.toJSON(),
+      avatar: user.avatar ? `${env.backendBaseUrl}${user.avatar}` : null,
+    };
+    ApiResponse.success(res, data, USER_MESSAGES.FETCHED);
   });
 
   updateMe = asyncHandler(async (req: Request, res: Response) => {

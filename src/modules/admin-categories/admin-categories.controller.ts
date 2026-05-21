@@ -4,6 +4,7 @@ import { ApiResponse, asyncHandler } from '../../common/utils';
 import { CATEGORY_MESSAGES } from '../../common/constants';
 import { UpdateCategoryDto } from './admin-categories.interface';
 import { getFileUrl } from '../../services/file-upload.service';
+import { env } from '../../config/env';
 
 export class AdminCategoriesController {
   private service: AdminCategoriesService;
@@ -14,7 +15,11 @@ export class AdminCategoriesController {
 
   getAll = asyncHandler(async (_req: Request, res: Response) => {
     const categories = await this.service.getAll();
-    ApiResponse.success(res, categories, CATEGORY_MESSAGES.LIST_FETCHED);
+    const data = categories.map((cat) => ({
+      ...cat.toJSON(),
+      icon: cat.icon ? `${env.backendBaseUrl}${cat.icon}` : null,
+    }));
+    ApiResponse.success(res, data, CATEGORY_MESSAGES.LIST_FETCHED);
   });
 
   create = asyncHandler(async (req: Request, res: Response) => {

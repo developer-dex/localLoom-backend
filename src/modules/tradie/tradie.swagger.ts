@@ -69,15 +69,30 @@
  *                       businessImage:
  *                         type: string
  *                         nullable: true
- *                         description: First business image URL
- *                       location:
- *                         type: string
- *                         nullable: true
+ *                         description: Full URL of the first business image (base URL + path)
+ *                         example: "http://localhost:5000/public/businessDetails/image.jpg"
  *                       services:
  *                         type: array
  *                         items:
- *                           type: string
- *                         description: Service category names
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               format: uuid
+ *                             name:
+ *                               type: string
+ *                         description: Service categories with id and name
+ *                       regions:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               format: uuid
+ *                             name:
+ *                               type: string
+ *                         description: Service regions with id and name
  *                       isOpen:
  *                         type: boolean
  *                         description: Whether the tradie is currently open based on openDays and timeFrom/timeTo

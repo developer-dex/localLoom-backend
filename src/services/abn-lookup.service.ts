@@ -12,6 +12,26 @@ export interface AbnLookupResult {
 }
 
 /**
+ * Parse an ABR response body. ABR normally returns plain JSON, but if a
+ * `callback` query parameter is sent it wraps the body in a JSONP envelope
+ * of the form `callback({...})`. Accept both shapes defensively so we never
+ * surface a raw `Unexpected token 'c', "callback({"...` parse error.
+ */
+function parseAbrPayload(text: string): Record<string, any> {
+  const trimmed = text.trim();
+
+  // Detect JSONP envelope: "<identifier>(<json>)"
+  const jsonpMatch = trimmed.match(/^[A-Za-z_$][\w$]*\(([\s\S]*)\)\s*;?\s*$/);
+  const jsonText = jsonpMatch ? jsonpMatch[1] : trimmed;
+
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    throw new Error('ABR returned an unparseable response body');
+  }
+}
+
+/**
  * ABN Lookup Service — validates Australian Business Numbers via the ABR API.
  *
  * In dev mode (no ABN_LOOKUP_GUID configured): returns mock data.
@@ -31,8 +51,9 @@ export class AbnLookupService {
     // Strip spaces from ABN
     const cleanAbn = abn.replace(/\s/g, '');
 
-    if (!this.guid) {
-      // Dev mode — return mock data
+    // Dev mode — skip the real ABR API entirely and return mock data.
+    // Triggered when running in development OR when no ABN_LOOKUP_GUID is configured.
+    if (env.isDevelopment || !this.guid) {
       logger.info(`[DEV] ABN lookup for ${cleanAbn} — returning mock data`);
       return {
         abn: cleanAbn,
@@ -46,12 +67,18 @@ export class AbnLookupService {
     }
 
     try {
-      const url = `${this.baseUrl}?abn=${cleanAbn}&callback=&guid=${this.guid}`;
+      // NOTE: do NOT pass a `callback` query parameter — when present, ABR
+      // returns a JSONP envelope of the form `callback({...})` which breaks
+      // JSON.parse. Without it, ABR returns plain JSON.
+      const url = `${this.baseUrl}?abn=${encodeURIComponent(cleanAbn)}&guid=${encodeURIComponent(this.guid)}`;
       const response = await fetch(url);
-      const text = await response.text();
 
-      // ABR returns JSONP-like response, parse it
-      const json = JSON.parse(text);
+      if (!response.ok) {
+        throw new Error(`ABR responded with HTTP ${response.status} ${response.statusText}`.trim());
+      }
+
+      const text = await response.text();
+      const json = parseAbrPayload(text);
 
       if (json.Message) {
         throw new Error(json.Message);

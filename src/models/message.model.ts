@@ -1,5 +1,6 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/database';
+import type { Attachment_Descriptor } from '../modules/chat/chat.interface';
 
 export interface IMessageAttributes {
   id: string;
@@ -8,7 +9,7 @@ export interface IMessageAttributes {
   content: string;
   type: string;
   status: string;
-  attachments?: string[] | null;
+  attachments?: Attachment_Descriptor[] | null;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -23,7 +24,7 @@ export class Message extends Model<IMessageAttributes, IMessageCreationAttribute
   declare content: string;
   declare type: string;
   declare status: string;
-  declare attachments: string[] | null;
+  declare attachments: Attachment_Descriptor[] | null;
   declare isDeleted: boolean;
   declare createdAt: Date;
   declare updatedAt: Date;
@@ -66,7 +67,7 @@ Message.init(
     attachments: {
       type: DataTypes.JSONB,
       allowNull: true,
-      defaultValue: [],
+      defaultValue: null,
     },
     isDeleted: {
       type: DataTypes.BOOLEAN,

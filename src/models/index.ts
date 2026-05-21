@@ -66,15 +66,15 @@ Notification.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(DeviceToken, { foreignKey: 'userId', as: 'deviceTokens' });
 DeviceToken.belongsTo(User, { foreignKey: 'userId' });
 
-// ── Conversation (1:1 customer ↔ tradie) ──
-Conversation.belongsTo(User, { foreignKey: 'customerId', as: 'customer' });
-Conversation.belongsTo(User, { foreignKey: 'tradieId', as: 'tradie' });
+// ── Conversation (role-agnostic: fromUser ↔ toUser) ──
+Conversation.belongsTo(User, { foreignKey: 'fromUserId', as: 'fromUser' });
+Conversation.belongsTo(User, { foreignKey: 'toUserId', as: 'toUser' });
 Conversation.belongsTo(Message, { foreignKey: 'lastMessageId', as: 'lastMessage' });
 Conversation.hasMany(Message, { foreignKey: 'conversationId', as: 'messages' });
 Message.belongsTo(Conversation, { foreignKey: 'conversationId' });
 Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
-User.hasMany(Conversation, { foreignKey: 'customerId', as: 'customerConversations' });
-User.hasMany(Conversation, { foreignKey: 'tradieId', as: 'tradieConversations' });
+User.hasMany(Conversation, { foreignKey: 'fromUserId', as: 'sentConversations' });
+User.hasMany(Conversation, { foreignKey: 'toUserId', as: 'receivedConversations' });
 
 // ── User (1) ↔ (N) Report ──
 User.hasMany(Report, { foreignKey: 'reporterId', as: 'reports' });

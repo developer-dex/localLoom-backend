@@ -108,6 +108,7 @@ export const CHAT_MESSAGES = {
   MESSAGES_FETCHED: 'Messages fetched successfully',
   ALREADY_EXISTS: 'Conversation already exists between these users',
   MESSAGES_READ: 'Messages marked as read',
+  UPLOADED: 'Attachments uploaded successfully',
 } as const;
 
 export const NOTIFICATION_MESSAGES = {

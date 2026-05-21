@@ -11,7 +11,7 @@
 1. [Response Envelope](#response-envelope)
 2. [Authentication](#authentication)
 3. [Endpoints Overview](#endpoints-overview)
-4. [Public Endpoints (No Auth)](#public-endpoints)
+4. [Public Endpoints](#public-endpoints)
    - [GET /tradies](#1-get-tradies)
    - [GET /tradies/:id](#2-get-tradiesid)
    - [GET /tradies/:id/details](#3-get-tradiesiddetails)
@@ -34,6 +34,7 @@
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Human-readable message",
   "data": { ... }
 }
@@ -43,6 +44,7 @@ Paginated:
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "...",
   "data": [ ... ],
   "meta": {
@@ -58,6 +60,7 @@ Error:
 ```json
 {
   "success": false,
+  "statusCode": 400,
   "message": "Error description"
 }
 ```
@@ -70,7 +73,7 @@ Error:
 Authorization: Bearer <accessToken>
 ```
 
-- Public endpoints: no header needed
+- Public endpoints: no header needed (some support optional auth for extra fields)
 - Authenticated endpoints: any logged-in user (customer or tradie)
 - Tradie self-management: requires `role: "tradie"` in the JWT
 
@@ -114,18 +117,19 @@ List all approved tradie profiles with optional filters. Supports pagination.
 | `rating` | number | No | 1-5 | Minimum rating filter |
 | `availability` | string | No | `"true"` or `"false"` | Filter by general availability |
 | `emergency` | string | No | `"true"` or `"false"` | Filter by emergency availability |
-| `page` | number | No | min 1 | Page number (default: 1) |
-| `limit` | number | No | 1-50 | Items per page (default: 20) |
+| `page` | number | No | min 1 (default: 1) | Page number |
+| `limit` | number | No | 1-50 (default: 20) | Items per page |
 
 #### Success Response — `200 OK`
 
 ```json
 {
   "success": true,
-  "message": "Tradies fetched",
+  "statusCode": 200,
+  "message": "Tradies fetched successfully",
   "data": [
     {
-      "id": "uuid-tradie-profile-id",
+      "id": "uuid",
       "businessName": "Smith Plumbing",
       "businessImage": "https://example.com/uploads/businessDetails/image.jpg",
       "location": "Sydney CBD",
@@ -152,18 +156,18 @@ List all approved tradie profiles with optional filters. Supports pagination.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string (UUID) | Tradie profile ID — use for detail endpoints |
+| `id` | string (UUID) | Tradie profile ID |
 | `businessName` | string or null | Business display name |
 | `businessImage` | string or null | First business image URL |
-| `location` | string or null | Business location text |
-| `services` | string[] | Array of category names (e.g. `["Plumbing"]`) |
-| `isOpen` | boolean | Whether the tradie is currently open based on business hours |
+| `location` | string or null | Business location text (`businessLocation` field) |
+| `services` | string[] | Array of category names |
+| `isOpen` | boolean | Whether the tradie is currently open based on server time + business hours |
 | `openDays` | string[] | Days of the week the business is open |
 | `timeFrom` | string or null | Opening time `HH:MM` |
 | `timeTo` | string or null | Closing time `HH:MM` |
-| `averageRating` | number | Average review rating (0-5, 2 decimal places) |
+| `averageRating` | number | Average review rating |
 | `totalRatingCount` | number | Total number of approved reviews |
-| `isFavourite` | boolean | Whether current user has favourited this tradie (false if not authenticated) |
+| `isFavourite` | boolean | Whether current user has favourited (false if not authenticated) |
 
 ---
 
@@ -184,7 +188,8 @@ Get a single tradie's full public profile. Also records a profile visit.
 ```json
 {
   "success": true,
-  "message": "Profile fetched",
+  "statusCode": 200,
+  "message": "Tradie profile fetched successfully",
   "data": {
     "id": "uuid",
     "userId": "uuid",
@@ -216,7 +221,7 @@ Get a single tradie's full public profile. Also records a profile visit.
     "user": {
       "id": "uuid",
       "name": "John Smith",
-      "avatar": "https://example.com/uploads/businessDetails/avatar.jpg",
+      "avatar": "https://example.com/uploads/avatar.jpg",
       "phone": "+61412345678",
       "email": "john@example.com"
     },
@@ -268,6 +273,7 @@ Get specific detail sections for a tradie. Use `type` query param to select whic
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Details fetched",
   "data": {
     "id": "uuid",
@@ -299,12 +305,12 @@ Get specific detail sections for a tradie. Use `type` query param to select whic
 | `businessName` | string or null | Business name |
 | `serviceDescription` | string or null | Service description |
 | `services` | array | `[{ id, name }]` — service categories |
-| `profileImage` | string or null | User avatar or profile photo |
-| `tradieName` | string or null | Tradie's full name |
-| `contactNumber` | string or null | Phone number |
-| `email` | string or null | Email address |
+| `profileImage` | string or null | User avatar or profile photo (falls back to `profilePhoto`) |
+| `tradieName` | string or null | Tradie's full name (from user record) |
+| `contactNumber` | string or null | Phone number (from user record) |
+| `email` | string or null | Email address (from user record) |
 | `website` | string or null | Website URL |
-| `location` | string or null | Business location |
+| `location` | string or null | Business location (`businessLocation` field) |
 | `timeFrom` | string or null | Opening time |
 | `timeTo` | string or null | Closing time |
 | `openDays` | string[] | Open days |
@@ -316,6 +322,7 @@ Get specific detail sections for a tradie. Use `type` query param to select whic
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Details fetched",
   "data": {
     "images": [
@@ -331,6 +338,7 @@ Get specific detail sections for a tradie. Use `type` query param to select whic
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Details fetched",
   "data": {
     "totalReviewCount": 24,
@@ -360,11 +368,18 @@ Get specific detail sections for a tradie. Use `type` query param to select whic
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string (UUID) | Review ID |
-| `giverName` | string or null | Reviewer's name |
-| `profileImage` | string or null | Reviewer's avatar URL |
-| `time` | string (ISO 8601) | Review creation timestamp |
+| `giverName` | string or null | Reviewer's name (from customer record) |
+| `profileImage` | string or null | Reviewer's avatar URL (from customer record) |
+| `time` | string (ISO 8601) | Review creation timestamp (`createdAt`) |
 | `rating` | number | Rating 1-5 |
 | `comment` | string or null | Review text |
+
+#### Error Responses
+
+| Status | Message |
+|--------|---------|
+| 400 | `"id" must be a valid GUID` / `"type" is required` / `"type" must be one of [about, work, reviews]` |
+| 404 | `"Tradie profile not found"` |
 
 ---
 
@@ -392,6 +407,7 @@ Get paginated approved reviews for a tradie.
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Reviews fetched",
   "data": [
     {
@@ -419,6 +435,12 @@ Get paginated approved reviews for a tradie.
 }
 ```
 
+#### Error Responses
+
+| Status | Message |
+|--------|---------|
+| 400 | `"id" must be a valid GUID` |
+
 ---
 
 ### 5. GET /tradies/:id/work-photos
@@ -438,6 +460,7 @@ Get all work photos for a tradie, sorted by `sortOrder`.
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Work photos fetched",
   "data": [
     {
@@ -463,6 +486,12 @@ Get all work photos for a tradie, sorted by `sortOrder`.
 | `createdAt` | string (ISO 8601) | Upload timestamp |
 | `updatedAt` | string (ISO 8601) | Last update timestamp |
 
+#### Error Responses
+
+| Status | Message |
+|--------|---------|
+| 400 | `"id" must be a valid GUID` |
+
 ---
 
 ## Authenticated Endpoints
@@ -471,7 +500,7 @@ Get all work photos for a tradie, sorted by `sortOrder`.
 
 ### 6. GET /tradies/:id/contact
 
-Get a tradie's public profile including contact details. Also logs the contact event (used for review eligibility).
+Get a tradie's public profile including contact details. Also logs the contact event (used for review eligibility — user becomes eligible to review after 7 hours).
 
 **Auth:** Required (any role)
 
@@ -483,15 +512,13 @@ Get a tradie's public profile including contact details. Also logs the contact e
 
 #### Success Response — `200 OK`
 
-Same shape as [GET /tradies/:id](#2-get-tradiesid) but includes full user contact info:
-- `user.phone` — full phone number
-- `user.email` — full email
-- `user.overallRating` — user's overall rating
+Same shape as [GET /tradies/:id](#2-get-tradiesid). The response includes full user contact info (`user.phone`, `user.email`).
 
 #### Error Responses
 
 | Status | Message |
 |--------|---------|
+| 400 | `"id" must be a valid GUID` |
 | 401 | Missing or invalid token |
 | 404 | `"Tradie profile not found"` |
 
@@ -499,7 +526,7 @@ Same shape as [GET /tradies/:id](#2-get-tradiesid) but includes full user contac
 
 ### 7. POST /tradies/abn-lookup
 
-Look up an Australian Business Number to get business details.
+Look up an Australian Business Number to get business details from the ABR (Australian Business Register).
 
 **Auth:** Required (any role)
 
@@ -509,42 +536,54 @@ Look up an Australian Business Number to get business details.
 
 ```json
 {
-  "abn": "12345678901"
+  "abn": "46002510054"
 }
 ```
 
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
-| `abn` | string | Yes | 9-20 chars, trimmed | The ABN to look up |
+| `abn` | string | Yes | min 9, max 20 chars, trimmed | The ABN to look up |
 
 #### Success Response — `200 OK`
 
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "ABN lookup successful",
   "data": {
-    "businessName": "Smith Plumbing Pty Ltd",
-    "status": "Active",
-    "entityType": "Australian Private Company"
+    "abn": "46002510054",
+    "abnStatus": "Active",
+    "entityName": "Smith Plumbing Pty Ltd",
+    "entityType": "Australian Private Company",
+    "state": "VIC",
+    "postcode": "3000",
+    "isActive": true
   }
 }
 ```
 
-##### ABN Lookup Fields
+##### ABN Lookup Response Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `businessName` | string or undefined | Registered business name |
-| `status` | string or undefined | ABN status (e.g. "Active", "Cancelled") |
-| `entityType` | string or undefined | Entity type description |
+| `abn` | string | The cleaned ABN (whitespace stripped) |
+| `abnStatus` | string | ABN status (e.g. "Active", "Cancelled") |
+| `entityName` | string | Registered entity/business name |
+| `entityType` | string | Entity type description |
+| `state` | string | Registered state |
+| `postcode` | string | Registered postcode |
+| `isActive` | boolean | `true` if `abnStatus === "Active"` |
+
+> **Note:** In development mode (`NODE_ENV=development`), the API returns mock data without calling the real ABR API, regardless of `ABN_LOOKUP_GUID` configuration.
 
 #### Error Responses
 
 | Status | Message |
 |--------|---------|
-| 400 | Validation error (ABN too short/long) |
+| 400 | Validation error (`"abn" is required` / `"abn" length must be at least 9 characters long`) |
 | 401 | Missing or invalid token |
+| 500 | `"ABN lookup failed: <upstream reason>"` (e.g. invalid GUID, ABR unreachable) |
 
 ---
 
@@ -565,7 +604,8 @@ Get the authenticated tradie's own full profile with services, regions, and work
 ```json
 {
   "success": true,
-  "message": "Profile fetched",
+  "statusCode": 200,
+  "message": "Tradie profile fetched successfully",
   "data": {
     "id": "uuid",
     "userId": "uuid",
@@ -614,13 +654,13 @@ Get the authenticated tradie's own full profile with services, regions, and work
 |--------|---------|
 | 401 | Missing or invalid token |
 | 403 | User role is not tradie |
-| 404 | `"Tradie profile not found"` (profile not yet created) |
+| 404 | `"Tradie profile not found"` |
 
 ---
 
 ### 9. POST /tradies/business/setup
 
-Create or update the tradie's business profile. This is an upsert — call it for initial setup and for updates.
+Create or update the tradie's business profile. This is an upsert — call it for initial setup and for subsequent updates.
 
 **Auth:** Required (tradie only)
 
@@ -630,19 +670,19 @@ Create or update the tradie's business profile. This is an upsert — call it fo
 
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
-| `businessName` | string | Yes | max 200 chars | Business/trading name |
-| `abn` | string | Yes | 9-20 chars | Australian Business Number |
+| `businessName` | string | Yes | max 200 chars, trimmed | Business/trading name |
+| `abn` | string | Yes | min 9, max 20 chars, trimmed | Australian Business Number |
 | `categoryIds` | string[] or CSV | Yes | Array of UUIDs, max 6 | Service category IDs |
 | `regionIds` | string[] or CSV | Yes | Array of UUIDs | Service region IDs |
 | `serviceDescription` | string | No | max 2000 chars | Description of services |
 | `website` | string | No | max 500 chars | Business website |
-| `timeFrom` | string | No | `HH:MM` format | Business hours start |
-| `timeTo` | string | No | `HH:MM` format | Business hours end |
-| `openDays` | string[] or CSV | No | Valid days: sunday-saturday | Days open |
+| `timeFrom` | string | No | `HH:MM` format (regex: `^([01]\d|2[0-3]):[0-5]\d$`) | Business hours start |
+| `timeTo` | string | No | `HH:MM` format (regex: `^([01]\d|2[0-3]):[0-5]\d$`) | Business hours end |
+| `openDays` | string[] or CSV | No | Valid values: `sunday`, `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday` | Days open |
 | `isEmergencyAvailable` | boolean or string | No | `true`/`false` | Emergency availability |
-| `abnData` | JSON string or object | No | `{ businessName, status, entityType }` | Pre-fetched ABN data |
-| `businessImage` | file | No | Image file | Business profile image |
-| `businessVideo` | file | No | Video, max 50MB | Business intro video |
+| `abnData` | JSON string or object | No | `{ businessName?, status?, entityType? }` | Pre-fetched ABN data from lookup |
+| `businessImage` | file | No | Image file, max 50MB | Business profile image (field name: `businessImage`) |
+| `businessVideo` | file | No | Video file, max 50MB | Business intro video (field name: `businessVideo`) |
 
 > `categoryIds` and `regionIds` accept both JSON arrays and comma-separated strings.
 > Example: `categoryIds=uuid1,uuid2` or repeated fields `categoryIds=uuid1&categoryIds=uuid2`
@@ -652,6 +692,7 @@ Create or update the tradie's business profile. This is an upsert — call it fo
 ```json
 {
   "success": true,
+  "statusCode": 200,
   "message": "Profile saved successfully",
   "data": {
     "id": "uuid",
@@ -684,7 +725,11 @@ Create or update the tradie's business profile. This is an upsert — call it fo
 
 | Status | Message |
 |--------|---------|
-| 400 | Validation error / `"Maximum 6 services allowed"` / `"Invalid category IDs: ..."` / `"Invalid region IDs: ..."` |
+| 400 | `"businessName" is required` / `"abn" is required` / `"categoryIds" is required` / `"regionIds" is required` |
+| 400 | `"Maximum 6 services allowed"` |
+| 400 | `"Invalid category IDs: uuid1, uuid2"` |
+| 400 | `"Invalid region IDs: uuid1"` |
+| 400 | `"timeFrom must be in HH:MM format (e.g. 09:00)"` |
 | 401 | Missing or invalid token |
 | 403 | `"Only tradies can set up a profile"` |
 
@@ -692,7 +737,7 @@ Create or update the tradie's business profile. This is an upsert — call it fo
 
 ### 10. POST /tradies/profile/work-photos
 
-Upload work photos to the tradie's portfolio. Maximum 20 photos total.
+Upload work photos to the tradie's portfolio. Maximum 20 photos total across all uploads.
 
 **Auth:** Required (tradie only)
 
@@ -709,7 +754,8 @@ Upload work photos to the tradie's portfolio. Maximum 20 photos total.
 ```json
 {
   "success": true,
-  "message": "Work photo uploaded",
+  "statusCode": 201,
+  "message": "Work photo uploaded successfully",
   "data": [
     {
       "id": "uuid",
@@ -727,7 +773,8 @@ Upload work photos to the tradie's portfolio. Maximum 20 photos total.
 
 | Status | Message |
 |--------|---------|
-| 400 | `"At least one image is required"` / `"Maximum 20 work photos allowed"` |
+| 400 | `"At least one image is required"` |
+| 400 | `"Maximum 20 work photos allowed"` |
 | 401 | Missing or invalid token |
 | 403 | User role is not tradie |
 | 404 | `"Tradie profile not found"` |
@@ -751,7 +798,8 @@ Delete a specific work photo from the tradie's portfolio.
 ```json
 {
   "success": true,
-  "message": "Work photo deleted",
+  "statusCode": 200,
+  "message": "Work photo deleted successfully",
   "data": null
 }
 ```
@@ -778,7 +826,8 @@ Get the authenticated tradie's profile statistics.
 ```json
 {
   "success": true,
-  "message": "Stats fetched",
+  "statusCode": 200,
+  "message": "Stats fetched successfully",
   "data": {
     "visitCount": 156,
     "reviewCount": 12,
@@ -802,6 +851,7 @@ Get the authenticated tradie's profile statistics.
 | 401 | Missing or invalid token |
 | 403 | User role is not tradie |
 | 404 | `"Tradie profile not found"` |
+
 
 ---
 
@@ -836,6 +886,22 @@ const work = await api.get(`/tradies/${id}/details?type=work`);
 const reviews = await api.get(`/tradies/${id}/details?type=reviews&page=1&limit=10`);
 ```
 
+### ABN lookup before profile setup
+```js
+// Look up ABN first
+const abnRes = await api.post('/tradies/abn-lookup', { abn: '46002510054' }, {
+  headers: { Authorization: `Bearer ${token}` }
+});
+const abnData = {
+  businessName: abnRes.data.data.entityName,
+  status: abnRes.data.data.abnStatus,
+  entityType: abnRes.data.data.entityType
+};
+
+// Then pass abnData into profile setup
+formData.append('abnData', JSON.stringify(abnData));
+```
+
 ### Business profile setup (multipart)
 ```js
 const formData = new FormData();
@@ -847,7 +913,9 @@ formData.append('timeFrom', '08:00');
 formData.append('timeTo', '17:00');
 formData.append('openDays', 'monday,tuesday,wednesday,thursday,friday');
 formData.append('isEmergencyAvailable', 'true');
+formData.append('abnData', JSON.stringify({ businessName: '...', status: 'Active', entityType: '...' }));
 formData.append('businessImage', { uri: imageUri, type: 'image/jpeg', name: 'photo.jpg' });
+formData.append('businessVideo', { uri: videoUri, type: 'video/mp4', name: 'intro.mp4' });
 
 const res = await api.post('/tradies/business/setup', formData, {
   headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }

@@ -30,18 +30,18 @@ export class ReviewService {
       throw new NotFoundException(TRADIE_MESSAGES.PROFILE_NOT_FOUND);
     }
 
-    // Check contact eligibility
-    const contactLog = await ContactLog.findOne({
-      where: { customerId, tradieProfileId: dto.tradieProfileId },
-    });
-    if (!contactLog) {
-      throw new ForbiddenException('You can only review tradies you have contacted');
-    }
+    // // Check contact eligibility
+    // const contactLog = await ContactLog.findOne({
+    //   where: { customerId, tradieProfileId: dto.tradieProfileId },
+    // });
+    // if (!contactLog) {
+    //   throw new ForbiddenException('You can only review tradies you have contacted');
+    // }
 
-    // Check review eligibility time
-    if (new Date() < contactLog.reviewEligibleAt) {
-      throw new ForbiddenException('You are not yet eligible to review this tradie');
-    }
+    // // Check review eligibility time
+    // if (new Date() < contactLog.reviewEligibleAt) {
+    //   throw new ForbiddenException('You are not yet eligible to review this tradie');
+    // }
 
     // Check for duplicate review
     const existing = await this.reviewRepository.findByCustomerAndTradie(customerId, dto.tradieProfileId);

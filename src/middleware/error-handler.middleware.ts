@@ -10,7 +10,8 @@ export const errorHandler = (
   _next: NextFunction,
 ): void => {
   if (err instanceof HttpException) {
-    ApiResponse.error(res, err.message, err.statusCode);
+    const code = 'code' in err ? (err as HttpException & { code?: string }).code : undefined;
+    ApiResponse.error(res, err.message, err.statusCode, code ? { code } : undefined);
     return;
   }
 

@@ -7,6 +7,7 @@ import { PaginatedResult } from '../../common/interfaces';
 import { AbnLookupService, AbnLookupResult } from '../../services/abn-lookup.service';
 import { UserRole } from '../../common/enums';
 import { Op } from 'sequelize';
+import { env } from '../../config/env';
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -55,9 +56,9 @@ export class TradieService {
     const data = result.data.map((profile) => ({
       id: profile.id,
       businessName: profile.businessName,
-      businessImage: profile.businessImages?.[0] ?? null,
-      location: profile.businessLocation,
-      services: (profile as TradieProfile & { services?: { id: string; name: string }[] }).services?.map((s) => s.name) ?? [],
+      businessImage: profile.businessImages?.[0] ? `${env.backendBaseUrl}${profile.businessImages[0]}` : null,
+      services: (profile as TradieProfile & { services?: { id: string; name: string }[] }).services?.map((s) => ({ id: s.id, name: s.name })) ?? [],
+      regions: (profile as TradieProfile & { serviceRegions?: { id: string; name: string }[] }).serviceRegions?.map((r) => ({ id: r.id, name: r.name })) ?? [],
       isOpen: computeIsOpen(profile),
       openDays: profile.openDays ?? [],
       timeFrom: profile.timeFrom,

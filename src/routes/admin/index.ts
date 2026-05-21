@@ -2,6 +2,8 @@ import { Router, type RequestHandler } from 'express';
 import { adminAuthRoutes } from '../../modules/admin-auth';
 import { adminCategoriesRoutes } from '../../modules/admin-categories';
 import { adminRegionsRoutes } from '../../modules/admin-regions';
+import { adminTradiesRoutes } from '../../modules/admin-tradies';
+import { adminReviewsRoutes } from '../../modules/admin-reviews';
 import { authenticateAdmin } from '../../middleware';
 
 const router = Router();
@@ -16,6 +18,8 @@ router.use(authenticateAdmin as unknown as RequestHandler);
 
 router.use('/categories', adminCategoriesRoutes);
 router.use('/regions', adminRegionsRoutes);
+router.use('/tradies', adminTradiesRoutes);
+router.use('/reviews', adminReviewsRoutes);
 
 export default router;
   

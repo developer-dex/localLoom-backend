@@ -2,6 +2,7 @@ import http from 'http';
 import app from './app';
 import { env, connectDatabase } from './config';
 import { initializeSocket } from './socket';
+import { bindChatRealtime } from './modules/chat/chat.realtime';
 import { logger } from './common/utils/logger';
 
 // Import models to register associations before any queries
@@ -15,6 +16,7 @@ const startServer = async (): Promise<void> => {
   const io = initializeSocket(httpServer);
 
   app.set('io', io);
+  bindChatRealtime(app);
 
   httpServer.listen(env.port, '0.0.0.0', () => {
     logger.info(`Server running on port ${env.port} [${env.nodeEnv}]`);

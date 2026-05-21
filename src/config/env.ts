@@ -63,6 +63,18 @@ const envSchema = Joi.object({
 
   // ABN Lookup (Australian Business Register)
   ABN_LOOKUP_GUID: Joi.string().optional().default(''),
+
+  // AI Classifier (Anthropic Claude)
+  AI_MODE: Joi.string().valid('development', 'production').default('development'),
+  ANTHROPIC_API_KEY: Joi.string().allow('').default(''),
+  ANTHROPIC_CLASSIFIER_MODEL: Joi.string().default('claude-haiku-4-5'),
+  AI_CLASSIFIER_MAX_TOKENS: Joi.number().integer().min(1).default(256),
+  AI_CLASSIFIER_TEMPERATURE: Joi.number().min(0).max(1).default(0),
+  AI_CLASSIFIER_TIMEOUT_MS: Joi.number().integer().min(1).default(15000),
+  AI_CLASSIFIER_RATE_LIMIT_MAX: Joi.number().integer().min(1).default(30),
+  AI_CLASSIFIER_RATE_LIMIT_WINDOW_MS: Joi.number().integer().min(1).default(60000),
+  AI_CLASSIFIER_CATALOG_CACHE_TTL_MS: Joi.number().integer().min(0).default(60000),
+  AI_CLASSIFIER_DEBUG_LOG_PROMPT: Joi.boolean().truthy('true').falsy('false').default(false),
 })
   .unknown()
   .required();
@@ -79,6 +91,7 @@ export const env = {
   apiPrefix: envVars.API_PREFIX as string,
   isProduction: envVars.NODE_ENV === 'production',
   isDevelopment: envVars.NODE_ENV === 'development',
+  backendBaseUrl: envVars.BACKEND_BASE_URL,
 
   db: {
     host: envVars.DB_HOST as string,
@@ -138,5 +151,18 @@ export const env = {
 
   abnLookup: {
     guid: envVars.ABN_LOOKUP_GUID as string,
+  },
+
+  aiClassifier: {
+    aiMode: envVars.AI_MODE as 'development' | 'production',
+    anthropicApiKey: envVars.ANTHROPIC_API_KEY as string,
+    model: envVars.ANTHROPIC_CLASSIFIER_MODEL as string,
+    maxTokens: envVars.AI_CLASSIFIER_MAX_TOKENS as number,
+    temperature: envVars.AI_CLASSIFIER_TEMPERATURE as number,
+    timeoutMs: envVars.AI_CLASSIFIER_TIMEOUT_MS as number,
+    rateLimitMax: envVars.AI_CLASSIFIER_RATE_LIMIT_MAX as number,
+    rateLimitWindowMs: envVars.AI_CLASSIFIER_RATE_LIMIT_WINDOW_MS as number,
+    catalogCacheTtlMs: envVars.AI_CLASSIFIER_CATALOG_CACHE_TTL_MS as number,
+    debugLogPrompt: envVars.AI_CLASSIFIER_DEBUG_LOG_PROMPT as boolean,
   },
 };

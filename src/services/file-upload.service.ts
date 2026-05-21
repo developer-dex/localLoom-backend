@@ -66,3 +66,44 @@ export const deleteFile = (filePath: string): void => {
     fs.unlinkSync(relativePath);
   }
 };
+
+// ─── Chat attachment upload ──────────────────────────────────────────────────
+
+export const ALLOWED_CHAT_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+export const ALLOWED_CHAT_VIDEO_MIME = ['video/mp4', 'video/quicktime', 'video/webm'];
+export const CHAT_IMAGE_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
+export const CHAT_VIDEO_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB
+const MAX_CHAT_FILES_PER_REQUEST = 5;
+
+/**
+ * Creates a multer middleware for chat attachment uploads.
+ * Accepts image and video MIME types, applies a 50MB ceiling at the multer layer
+ * (per-MIME enforcement is done post-upload in the controller), stores files under
+ * `public/chat-attachments/` with `{timestamp}-{random}{ext}` filenames.
+ *
+ * @param fieldName - repeating form field name (default: 'files')
+ */
+export const createChatAttachmentUpload = (fieldName = 'files') => {
+  const uploadDir = path.join('public', 'chat-attachments');
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+  const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+    },
+  });
+
+  const chatFileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
+    if (ALLOWED_CHAT_IMAGE_MIME.includes(file.mimetype)) return cb(null, true);
+    if (ALLOWED_CHAT_VIDEO_MIME.includes(file.mimetype)) return cb(null, true);
+    cb(new BadRequestException(`Unsupported MIME type: ${file.mimetype}`));
+  };
+
+  return multer({
+    storage,
+    limits: { fileSize: CHAT_VIDEO_SIZE_LIMIT, files: MAX_CHAT_FILES_PER_REQUEST },
+    fileFilter: chatFileFilter,
+  }).array(fieldName, MAX_CHAT_FILES_PER_REQUEST);
+};

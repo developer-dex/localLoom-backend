@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../../common/interfaces';
 import { TRADIE_MESSAGES } from '../../common/constants';
 import { SetupTradieProfileDto } from './tradie.interface';
 import { getFileUrl } from '../../services/file-upload.service';
+import { logger } from '../../common/utils/logger';
 
 export class TradieController {
   private tradieService: TradieService;
@@ -66,21 +67,27 @@ export class TradieController {
   });
 
   setupProfile = asyncHandler(async (req: Request, res: Response) => {
-    const { userId, role } = (req as AuthenticatedRequest).user;
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    try {
+      const { userId, role } = (req as AuthenticatedRequest).user;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
 
-    const dto: SetupTradieProfileDto = {
-      ...req.body,
-      businessImageUrl: files?.businessImage?.[0]
-        ? getFileUrl('businessDetails', files.businessImage[0].filename)
-        : undefined,
-      businessVideoUrl: files?.businessVideo?.[0]
-        ? getFileUrl('businessDetails', files.businessVideo[0].filename)
-        : undefined,
-    };
+      const dto: SetupTradieProfileDto = {
+        ...req.body,
+        businessImageUrl: files?.businessImage?.[0]
+          ? getFileUrl('businessDetails', files.businessImage[0].filename)
+          : undefined,
+        businessVideoUrl: files?.businessVideo?.[0]
+          ? getFileUrl('businessDetails', files.businessVideo[0].filename)
+          : undefined,
+      };
 
-    const profile = await this.tradieService.setupProfile(userId, role, dto);
-    ApiResponse.success(res, profile, 'Profile saved successfully');
+      const profile = await this.tradieService.setupProfile(userId, role, dto);
+      ApiResponse.success(res, profile, 'Profile saved successfully');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`setupProfile failed: ${msg}`, { error });
+      throw error;
+    }
   });
 
   addWorkPhotos = asyncHandler(async (req: Request, res: Response) => {
