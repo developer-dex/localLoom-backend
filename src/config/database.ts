@@ -12,12 +12,16 @@ export const sequelize = new Sequelize(env.db.name, env.db.user, env.db.password
       require: true,
       rejectUnauthorized: false,
     },
+    connectTimeoutMS: 60000,
   },
   pool: {
     max: 20,
-    min: 5,
-    acquire: 30000,
+    min: 2,
+    acquire: 60000,
     idle: 10000,
+  },
+  retry: {
+    max: 5,
   },
   define: {
     timestamps: true,
@@ -26,13 +30,28 @@ export const sequelize = new Sequelize(env.db.name, env.db.user, env.db.password
   },
 });
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const connectDatabase = async (): Promise<void> => {
-  try {
-    await sequelize.authenticate();
-    logger.info('PostgreSQL connected successfully');
-  } catch (error) {
-    logger.error('Failed to connect to PostgreSQL:', error);
-    process.exit(1);
+  const maxRetries = 5;
+  const baseDelay = 3000;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await sequelize.authenticate();
+      logger.info('PostgreSQL connected successfully');
+      return;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        logger.error(`Failed to connect to PostgreSQL after ${maxRetries} attempts:`, error);
+        process.exit(1);
+      }
+      const delay = baseDelay * attempt;
+      logger.warn(
+        `Database connection attempt ${attempt}/${maxRetries} failed. Retrying in ${delay / 1000}s...`
+      );
+      await sleep(delay);
+    }
   }
 };
 
