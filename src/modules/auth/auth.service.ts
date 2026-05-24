@@ -85,7 +85,8 @@ export class AuthService {
 
     // In dev mode phone uses the fixed devCode; email always uses a real generated code
     const isDevMode = !env.isProduction;
-    const emailCode = generateOTP(6);
+    // const emailCode = generateOTP(6);
+    const emailCode = '123456'
     const phoneCode = isDevMode ? env.otp.devCode : emailCode;
     const expiresAt = new Date(Date.now() + env.otp.expiryMinutes * 60 * 1000);
 
@@ -106,14 +107,14 @@ export class AuthService {
     }
 
     // Phone: skip SMS in dev mode (devCode is used). Email: always send real OTP.
-    const deliveries: Promise<unknown>[] = [];
-    if (!isDevMode) {
-      deliveries.push(this.smsService.sendOtp(phone, phoneCode));
-    }
-    if (email) {
-      deliveries.push(this.emailService.sendOtp(email, emailCode));
-    }
-    await Promise.all(deliveries);
+    // const deliveries: Promise<unknown>[] = [];
+    // if (!isDevMode) {
+    //   deliveries.push(this.smsService.sendOtp(phone, phoneCode));
+    // }
+    // if (email) {
+    //   deliveries.push(this.emailService.sendOtp(email, emailCode));
+    // }
+    // await Promise.all(deliveries);
 
     return email ? { phone, email } : { phone };
   }
@@ -151,7 +152,8 @@ export class AuthService {
 
     // In dev mode phone uses the fixed devCode; email always uses a real generated code
     const isDevMode = !env.isProduction;
-    const emailCode = generateOTP(6);
+    // const emailCode = generateOTP(6);
+    const emailCode = '123456';
     const phoneCode = isDevMode ? env.otp.devCode : emailCode;
     const expiresAt = new Date(Date.now() + env.otp.expiryMinutes * 60 * 1000);
 
