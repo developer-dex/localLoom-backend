@@ -157,7 +157,7 @@ export class AuthService {
     const phoneCode = isDevMode ? env.otp.devCode : emailCode;
     const expiresAt = new Date(Date.now() + env.otp.expiryMinutes * 60 * 1000);
 
-    const deliveries: Promise<unknown>[] = [];
+    // const deliveries: Promise<unknown>[] = [];
 
     // Phone channel — store devCode in dev, real code in prod; skip actual SMS in dev
     if (user.phone) {
@@ -168,9 +168,9 @@ export class AuthService {
         purpose: OtpPurpose.LOGIN,
         expiresAt,
       });
-      if (!isDevMode) {
-        deliveries.push(this.smsService.sendOtp(user.phone, phoneCode));
-      }
+      // if (!isDevMode) {
+      //   deliveries.push(this.smsService.sendOtp(user.phone, phoneCode));
+      // }
     }
 
     // Email channel — always send real OTP to email (even in dev)
@@ -182,10 +182,10 @@ export class AuthService {
         purpose: OtpPurpose.LOGIN,
         expiresAt,
       });
-      deliveries.push(this.emailService.sendOtp(user.email, emailCode));
+      // deliveries.push(this.emailService.sendOtp(user.email, emailCode));
     }
 
-    await Promise.all(deliveries);
+    // await Promise.all(deliveries);
 
     // Return masked version of the identifier the user logged in with
     const maskedIdentifier = identifierType === 'phone' ? maskPhone(identifier) : maskEmail(identifier);
