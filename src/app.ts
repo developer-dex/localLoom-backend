@@ -38,9 +38,15 @@ app.use(
 // ── Rate Limiting ──
 app.use(apiLimiter);
 
-// ── Static files ──
-app.use('/uploads', express.static(env.upload.dir));
-app.use('/public', express.static('public'));
+// ── Static files (allow cross-origin embedding so the admin SPA on a
+// different origin can render uploaded images/videos via <img> / <video>;
+// helmet's default CORP is `same-origin` which blocks this) ──
+const allowCrossOriginEmbed = (_req: Request, res: Response, next: () => void) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+};
+app.use('/uploads', allowCrossOriginEmbed, express.static(env.upload.dir));
+app.use('/public', allowCrossOriginEmbed, express.static('public'));
 
 // ── API Documentation ──
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {

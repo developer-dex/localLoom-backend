@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { AiClassifierService } from './ai-classifier.service';
 import { ApiResponse, asyncHandler } from '../../common/utils';
-import { AuthenticatedRequest } from '../../common/interfaces';
 import { createCatalogLoader } from './catalog-loader';
 import { createAnthropicClassifierClient } from './anthropic-client';
 import { env } from '../../config/env';
@@ -27,9 +26,7 @@ export class AiClassifierController {
   }
 
   classify = asyncHandler(async (req: Request, res: Response) => {
-    const userId =
-      ((req as AuthenticatedRequest).user as { userId?: string } | undefined)
-        ?.userId ?? 'anonymous';
+    const userId = req.ip ?? 'anonymous';
     const { prompt } = req.body;
     const requestId = (req.headers['x-request-id'] as string) ?? randomUUID();
 

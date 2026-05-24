@@ -31,6 +31,14 @@ const envSchema = Joi.object({
 
   SERVER_HOST: Joi.string().default(''),
 
+  BACKEND_BASE_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.required(),
+      otherwise: Joi.optional().default('http://localhost:5000'),
+    }),
+
   // Twilio (required in production, optional in development — dev mode uses hardcoded OTP)
   TWILIO_ACCOUNT_SID: Joi.string().when('NODE_ENV', {
     is: 'production',
@@ -91,7 +99,7 @@ export const env = {
   apiPrefix: envVars.API_PREFIX as string,
   isProduction: envVars.NODE_ENV === 'production',
   isDevelopment: envVars.NODE_ENV === 'development',
-  backendBaseUrl: envVars.BACKEND_BASE_URL,
+  backendBaseUrl: envVars.BACKEND_BASE_URL as string,
 
   db: {
     host: envVars.DB_HOST as string,

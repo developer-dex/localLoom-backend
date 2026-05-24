@@ -3,6 +3,7 @@ import { TradieProfile } from '../../models';
 import { NotFoundException } from '../../common/exceptions';
 import { PaginatedResult } from '../../common/interfaces';
 import { TRADIE_MESSAGES } from '../../common/constants';
+import { serializeTradieProfile } from './admin-tradies.serializer';
 
 export interface BulkActionResult {
   processed: number;
@@ -16,16 +17,20 @@ export class AdminTradiesService {
     this.repo = new AdminTradiesRepository();
   }
 
-  async list(options: TradieListOptions): Promise<PaginatedResult<TradieProfile>> {
-    return this.repo.findAll(options);
+  async list(options: TradieListOptions): Promise<PaginatedResult<Record<string, unknown>>> {
+    const result = await this.repo.findAll(options);
+    return {
+      data: result.data.map(serializeTradieProfile),
+      meta: result.meta,
+    };
   }
 
-  async getById(id: string): Promise<TradieProfile> {
+  async getById(id: string): Promise<Record<string, unknown>> {
     const profile = await this.repo.findById(id);
     if (!profile) {
       throw new NotFoundException(TRADIE_MESSAGES.PROFILE_NOT_FOUND);
     }
-    return profile;
+    return serializeTradieProfile(profile);
   }
 
   async approve(id: string): Promise<TradieProfile> {

@@ -11,14 +11,12 @@
  *   post:
  *     summary: Classify a free-text service description
  *     tags: [AI Classifier]
- *     security:
- *       - bearerAuth: []
  *     description: |
  *       Accepts a free-text prompt describing a service need and returns a structured
  *       `{ category, region }` pair. Each value is either the canonical name of an active
  *       catalog entry or `null` if no match is found.
  *
- *       Requires authentication. Per-user rate limited.
+ *       This endpoint is open and does not require authentication. Rate limited by IP.
  *     requestBody:
  *       required: true
  *       content:
@@ -82,10 +80,8 @@
  *                 message:
  *                   type: string
  *                   example: '"prompt" is required'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
  *       429:
- *         description: Per-user rate limit exceeded
+ *         description: Rate limit exceeded
  *         content:
  *           application/json:
  *             schema:
