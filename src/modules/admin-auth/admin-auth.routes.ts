@@ -12,7 +12,7 @@ const router = Router();
 const controller = new AdminAuthController();
 
 // Public routes
-router.post('/login', authLimiter, validate(adminLoginSchema), controller.login);
+router.post('/login', /* authLimiter, */ validate(adminLoginSchema), controller.login); // TODO: re-enable rate limiting before production
 router.post('/refresh-token', validate(adminRefreshTokenSchema), controller.refreshToken);
 
 // Protected routes (admin only)

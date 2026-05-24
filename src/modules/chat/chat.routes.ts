@@ -53,7 +53,7 @@ router.get(
 router.post(
   '/messages',
   express.json({ limit: '1mb' }) as unknown as RequestHandler,
-  chatSendRateLimiter as unknown as RequestHandler,
+  // chatSendRateLimiter as unknown as RequestHandler, // TODO: re-enable rate limiting before production
   validate(sendMessageSchema),
   controller.sendMessage,
 );
@@ -61,7 +61,7 @@ router.post(
 // 6. POST /messages/upload — upload attachments
 router.post(
   '/messages/upload',
-  chatUploadRateLimiter as unknown as RequestHandler,
+  // chatUploadRateLimiter as unknown as RequestHandler, // TODO: re-enable rate limiting before production
   createChatAttachmentUpload('files') as unknown as RequestHandler,
   controller.uploadAttachments,
 );

@@ -9,7 +9,7 @@ const controller = new AiClassifierController();
 
 router.post(
   '/classify-service',
-  aiClassifierRateLimiter,
+  // aiClassifierRateLimiter, // TODO: re-enable rate limiting before production
   validate(classifyServiceSchema),
   controller.classify,
 );

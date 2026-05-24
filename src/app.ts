@@ -36,7 +36,7 @@ app.use(
 );
 
 // ── Rate Limiting ──
-app.use(apiLimiter);
+// app.use(apiLimiter); // TODO: re-enable rate limiting before production
 
 // ── Static files (allow cross-origin embedding so the admin SPA on a
 // different origin can render uploaded images/videos via <img> / <video>;

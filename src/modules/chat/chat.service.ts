@@ -239,9 +239,9 @@ export class ChatService {
     dto: SendMessageDto,
   ): Promise<{ message: MessagePayload; conversationId: string; clientMessageId?: string }> {
     // 1. Rate limit
-    if (!this.sendBucket.consume(userId)) {
-      throw new ChatRateLimitedException('Too many chat requests');
-    }
+    // if (!this.sendBucket.consume(userId)) { // TODO: re-enable rate limiting before production
+    //   throw new ChatRateLimitedException('Too many chat requests');
+    // }
 
     // 2. Resolve conversation
     let conv: ConversationRowProjection;
