@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { CategoryService } from './category.service';
 import { ApiResponse, asyncHandler } from '../../common/utils';
 import { CATEGORY_MESSAGES } from '../../common/constants';
+import { env } from '../../config/env';
 
 export class CategoryController {
   private categoryService: CategoryService;
@@ -12,11 +13,19 @@ export class CategoryController {
 
   getAll = asyncHandler(async (_req: Request, res: Response) => {
     const categories = await this.categoryService.getAllActive();
-    ApiResponse.success(res, categories, CATEGORY_MESSAGES.LIST_FETCHED);
+    const data = categories.map((cat) => ({
+      ...cat.toJSON(),
+      icon: cat.icon ? `${env.backendBaseUrl}${cat.icon}` : null,
+    }));
+    ApiResponse.success(res, data, CATEGORY_MESSAGES.LIST_FETCHED);
   });
 
   getById = asyncHandler(async (req: Request, res: Response) => {
     const category = await this.categoryService.getById(req.params.id);
-    ApiResponse.success(res, category, CATEGORY_MESSAGES.FETCHED);
+    const data = {
+      ...category.toJSON(),
+      icon: category.icon ? `${env.backendBaseUrl}${category.icon}` : null,
+    };
+    ApiResponse.success(res, data, CATEGORY_MESSAGES.FETCHED);
   });
 }
