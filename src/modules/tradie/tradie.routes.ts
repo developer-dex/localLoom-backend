@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express';
 import { TradieController } from './tradie.controller';
-import { validate, authenticateUser, authorize, optionalAuthenticateUser } from '../../middleware';
+import { validate, authenticateUser, /* authorize, */ optionalAuthenticateUser } from '../../middleware';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -68,22 +68,24 @@ router.get('/:id/contact', validate(tradieIdParamSchema, 'params'), controller.g
 router.post('/abn-lookup', validate(abnLookupSchema), controller.abnLookup);
 
 // Tradie self-management (tradie role only)
-router.get('/me/profile', authorize('tradie') as unknown as RequestHandler, controller.getMyProfile);
+router.get('/me/profile', /* authorize('tradie') as unknown as RequestHandler, */ controller.getMyProfile);
 
 // Single profile setup endpoint (create or update)
 router.post(
   '/business/setup',
-  authorize('tradie') as unknown as RequestHandler,
+  // authorize('tradie') as unknown as RequestHandler,
   uploadProfileSetup,
   validate(setupTradieProfileSchema),
   controller.setupProfile,
 );
 
 // Work photos
-router.post('/profile/work-photos', authorize('tradie') as unknown as RequestHandler, uploadWorkPhotos, controller.addWorkPhotos);
-router.delete('/profile/work-photos/:photoId', authorize('tradie') as unknown as RequestHandler, validate(photoIdParamSchema, 'params'), controller.deleteWorkPhoto);
+router.post('/profile/work-photos',
+  //  authorize('tradie') as unknown as RequestHandler,
+    uploadWorkPhotos, controller.addWorkPhotos);
+router.delete('/profile/work-photos/:photoId', /* authorize('tradie') as unknown as RequestHandler, */ validate(photoIdParamSchema, 'params'), controller.deleteWorkPhoto);
 
 // Stats
-router.get('/profile/stats', authorize('tradie') as unknown as RequestHandler, controller.getStats);
+router.get('/profile/stats', /* authorize('tradie') as unknown as RequestHandler, */ controller.getStats);
 
 export default router;

@@ -96,7 +96,11 @@ export class TradieRepository {
     ];
 
     const { count: total, rows } = await TradieProfile.findAndCountAll({
-      where: { profileStatus: 'approved', ...filters },
+      where: {
+        profileStatus: 'approved',
+        ...(userId ? { userId: { [Op.ne]: userId } } : {}),
+        ...filters,
+      },
       include,
       order: [['createdAt', 'DESC']],
       offset,

@@ -181,9 +181,9 @@ export class TradieService {
    * Single setup endpoint — create or update the tradie profile with all fields at once.
    */
   async setupProfile(userId: string, userRole: string, dto: SetupTradieProfileDto): Promise<TradieProfile> {
-    if (userRole !== UserRole.TRADIE) {
-      throw new ForbiddenException('Only tradies can set up a profile');
-    }
+    // if (userRole !== UserRole.TRADIE) {
+    //   throw new ForbiddenException('Only tradies can set up a profile');
+    // }
 
     // Normalise array fields that may arrive as a single string from multipart
     const categoryIds = Array.isArray(dto.categoryIds) ? dto.categoryIds : [dto.categoryIds];

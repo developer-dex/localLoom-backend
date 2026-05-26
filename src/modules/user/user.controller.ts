@@ -19,6 +19,10 @@ export class UserController {
     const data = {
       ...user.toJSON(),
       avatar: user.avatar ? `${env.backendBaseUrl}${user.avatar}` : null,
+      profile_setup: user.profile_setup,
+      is_tradie: user.is_tradie,
+      is_customer: user.is_customer,
+      tradie_profile_status: user.tradie_profile_status,
     };
     ApiResponse.success(res, data, USER_MESSAGES.FETCHED);
   });

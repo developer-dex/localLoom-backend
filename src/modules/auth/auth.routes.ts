@@ -27,5 +27,6 @@ router.post('/refresh-token', validate(refreshTokenSchema), controller.refreshTo
 router.use(authenticateUser as unknown as RequestHandler);
 router.post('/logout', controller.logout);
 router.get('/profile', controller.getProfile);
+router.post('/become-tradie', controller.becomeTradie);
 
 export default router;

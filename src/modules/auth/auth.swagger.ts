@@ -377,3 +377,94 @@
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  */
+
+/**
+ * @swagger
+ * /auth/become-tradie:
+ *   post:
+ *     summary: Switch the current user to the tradie role
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Inspects the caller's tradie profile and, if it is approved, issues a
+ *       fresh `Token_Pair` with `role = "tradie"` embedded in the JWT.
+ *
+ *       **Response shapes**
+ *
+ *       1. **No tradie profile exists:**
+ *          ```json
+ *          { "profile_exist": false, "profile_status": "not found" }
+ *          ```
+ *       2. **Tradie profile exists but is not approved** (e.g. `pending`, `rejected`):
+ *          ```json
+ *          { "profile_exist": true, "profile_status": "pending" }
+ *          ```
+ *       3. **Tradie profile is approved — new tokens returned:**
+ *          ```json
+ *          {
+ *            "profile_exist": true,
+ *            "profile_status": "approved",
+ *            "tokens": { "accessToken": "...", "refreshToken": "..." }
+ *          }
+ *          ```
+ *
+ *       When tokens are issued, `users.role` is updated to `tradie` and the
+ *       new refresh token is persisted server-side, mirroring the standard
+ *       login flow. The previous tokens remain valid until they expire.
+ *     responses:
+ *       200:
+ *         description: Result of the role-switch attempt
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: Switched to tradie role
+ *                 data:
+ *                   oneOf:
+ *                     - type: object
+ *                       title: NoProfile
+ *                       properties:
+ *                         profile_exist:
+ *                           type: boolean
+ *                           example: false
+ *                         profile_status:
+ *                           type: string
+ *                           example: not found
+ *                     - type: object
+ *                       title: ProfileNotApproved
+ *                       properties:
+ *                         profile_exist:
+ *                           type: boolean
+ *                           example: true
+ *                         profile_status:
+ *                           type: string
+ *                           example: pending
+ *                     - type: object
+ *                       title: ProfileApproved
+ *                       properties:
+ *                         profile_exist:
+ *                           type: boolean
+ *                           example: true
+ *                         profile_status:
+ *                           type: string
+ *                           example: approved
+ *                         tokens:
+ *                           type: object
+ *                           properties:
+ *                             accessToken:
+ *                               type: string
+ *                             refreshToken:
+ *                               type: string
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */

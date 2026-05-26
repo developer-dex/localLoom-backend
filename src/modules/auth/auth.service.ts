@@ -5,6 +5,7 @@ import { SmsService } from '../../services/sms.service';
 import { EmailService } from '../../services/email.service';
 import { TokenPair, EmailLoginDto, EmailRegisterDto, UserSignupDto, UserLoginDto, UserVerifyOtpDto } from './auth.interface';
 import { User } from '../../models';
+import { TradieProfile } from '../../models';
 import {
   BadRequestException,
   UnauthorizedException,
@@ -352,12 +353,18 @@ export class AuthService {
   /**
    * Get current user profile.
    */
-  async getProfile(userId: string): Promise<User> {
+  async getProfile(userId: string): Promise<User & { profile_setup: { profile_exist: boolean; profile_status: string } }> {
     const user = await this.authRepository.findUserById(userId);
     if (!user) {
       throw new UnauthorizedException(AUTH_MESSAGES.INVALID_TOKEN);
     }
-    return user;
+
+    const profile = await TradieProfile.findOne({ where: { userId } });
+    const profile_setup = profile
+      ? { profile_exist: true, profile_status: profile.profileStatus }
+      : { profile_exist: false, profile_status: 'not found' };
+
+    return Object.assign(user, { profile_setup });
   }
 
   // ── Email + Password Auth ──
@@ -485,5 +492,49 @@ export class AuthService {
     const refreshToken = jwt.sign(payload, env.jwt.refreshSecret, refreshOpts);
 
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * Become Tradie — issues a new Token_Pair under the `tradie` role when the
+   * caller already has an approved tradie profile.
+   *
+   * Returns one of three shapes:
+   *  - No profile: { profile_exist: false, profile_status: 'not found', tokens: null }
+   *  - Profile exists but not approved: { profile_exist: true, profile_status: <status>, tokens: null }
+   *  - Profile approved: { profile_exist: true, profile_status: 'approved', tokens: { ... } }
+   *
+   * When tokens are issued, `users.role` is also flipped to 'tradie' and the new
+   * refresh token is persisted, mirroring the regular login flow.
+   */
+  async becomeTradie(userId: string): Promise<{
+    profile_exist: boolean;
+    profile_status: string;
+    tokens: TokenPair | null;
+  }> {
+    const profile = await TradieProfile.findOne({ where: { userId } });
+
+    if (!profile) {
+      return { profile_exist: false, profile_status: 'not found', tokens: null };
+    }
+
+    if (profile.profileStatus !== 'approved') {
+      return { profile_exist: true, profile_status: profile.profileStatus, tokens: null };
+    }
+
+    const user = await this.authRepository.findUserById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Promote role and re-issue tokens with the new role embedded.
+    if (user.role !== UserRole.TRADIE) {
+      user.role = UserRole.TRADIE;
+      await user.save();
+    }
+
+    const tokens = this.generateTokens(user);
+    await this.authRepository.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return { profile_exist: true, profile_status: 'approved', tokens };
   }
 }

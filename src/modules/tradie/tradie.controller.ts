@@ -6,6 +6,7 @@ import { TRADIE_MESSAGES } from '../../common/constants';
 import { SetupTradieProfileDto } from './tradie.interface';
 import { getFileUrl } from '../../services/file-upload.service';
 import { logger } from '../../common/utils/logger';
+import { env } from '../../config/env';
 
 export class TradieController {
   private tradieService: TradieService;
@@ -63,7 +64,14 @@ export class TradieController {
   getMyProfile = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = (req as AuthenticatedRequest).user;
     const profile = await this.tradieService.getMyProfile(userId);
-    ApiResponse.success(res, profile, TRADIE_MESSAGES.PROFILE_FETCHED);
+    const data = {
+      ...profile.toJSON(),
+      workPhotos: (profile.workPhotos ?? []).map((photo) => ({
+        ...photo.toJSON(),
+        imageUrl: photo.imageUrl ? `${env.backendBaseUrl}${photo.imageUrl}` : photo.imageUrl,
+      })),
+    };
+    ApiResponse.success(res, data, TRADIE_MESSAGES.PROFILE_FETCHED);
   });
 
   setupProfile = asyncHandler(async (req: Request, res: Response) => {

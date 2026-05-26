@@ -83,4 +83,35 @@ export class AuthController {
     const user = await this.authService.getProfile(userId);
     ApiResponse.success(res, user, AUTH_MESSAGES.PROFILE_FETCHED);
   });
+
+  becomeTradie = asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    const result = await this.authService.becomeTradie(userId);
+
+    if (!result.profile_exist) {
+      return ApiResponse.success(
+        res,
+        { profile_exist: false, profile_status: 'not found' },
+        'Tradie profile not found',
+      );
+    }
+
+    if (result.tokens === null) {
+      return ApiResponse.success(
+        res,
+        { profile_exist: true, profile_status: result.profile_status },
+        'Tradie profile is not approved yet',
+      );
+    }
+
+    ApiResponse.success(
+      res,
+      {
+        profile_exist: true,
+        profile_status: result.profile_status,
+        tokens: result.tokens,
+      },
+      'Switched to tradie role',
+    );
+  });
 }
