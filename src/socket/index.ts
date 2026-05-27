@@ -9,6 +9,7 @@ import {
 } from './socket.types';
 import { env } from '../config/env';
 import { logger } from '../common/utils/logger';
+import { User } from '../models/user.model';
 
 const onlineUsers = new Map<string, Set<string>>();
 
@@ -32,6 +33,17 @@ export const initializeSocket = (
     const userId = authSocket.user.userId;
 
     logger.info(`Socket connected: ${socket.id} | User: ${userId}`);
+
+    // Resolve user name for richer connect log (non-blocking)
+    void (async () => {
+      try {
+        const user = await User.findByPk(userId, { attributes: ['name'] });
+        const name = user?.name ?? '(unknown)';
+        logger.info(`User connected to socket → id: ${userId} | name: ${name} | socketId: ${socket.id}`);
+      } catch (err) {
+        logger.error(`Failed to resolve user name on socket connect [${userId}]:`, err);
+      }
+    })();
 
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());

@@ -53,20 +53,29 @@ export class TradieService {
 
     const result = await this.repo.findAllApproved(where, pagination, filters.categoryId, filters.regionId, userId);
 
-    const data = result.data.map((profile) => ({
-      id: profile.id,
-      businessName: profile.businessName,
-      businessImage: profile.businessImages?.[0] ? `${env.backendBaseUrl}${profile.businessImages[0]}` : null,
-      services: (profile as TradieProfile & { services?: { id: string; name: string }[] }).services?.map((s) => ({ id: s.id, name: s.name })) ?? [],
-      regions: (profile as TradieProfile & { serviceRegions?: { id: string; name: string }[] }).serviceRegions?.map((r) => ({ id: r.id, name: r.name })) ?? [],
-      isOpen: computeIsOpen(profile),
-      openDays: profile.openDays ?? [],
-      timeFrom: profile.timeFrom,
-      timeTo: profile.timeTo,
-      averageRating: (profile as TradieProfile & { averageRating: number }).averageRating,
-      totalRatingCount: (profile as TradieProfile & { totalRatingCount: number }).totalRatingCount,
-      isFavourite: (profile as TradieProfile & { isFavourite: boolean }).isFavourite,
-    }));
+    const data = result.data.map((profile) => {
+      const item: Record<string, unknown> = {
+        id: profile.id,
+        businessName: profile.businessName,
+        businessImage: profile.businessImages?.[0] ? `${env.backendBaseUrl}${profile.businessImages[0]}` : null,
+        services: (profile as TradieProfile & { services?: { id: string; name: string }[] }).services?.map((s) => ({ id: s.id, name: s.name })) ?? [],
+        regions: (profile as TradieProfile & { serviceRegions?: { id: string; name: string }[] }).serviceRegions?.map((r) => ({ id: r.id, name: r.name })) ?? [],
+        isOpen: computeIsOpen(profile),
+        openDays: profile.openDays ?? [],
+        timeFrom: profile.timeFrom,
+        timeTo: profile.timeTo,
+        isEmergencyAvailable: profile.isEmergencyAvailable,
+        averageRating: (profile as TradieProfile & { averageRating: number }).averageRating,
+        totalRatingCount: (profile as TradieProfile & { totalRatingCount: number }).totalRatingCount,
+      };
+
+      // Only include is_favourite when the request is authenticated.
+      if (userId) {
+        item.is_favourite = (profile as TradieProfile & { isFavourite: boolean }).isFavourite;
+      }
+
+      return item;
+    });
 
     return { data, meta: result.meta };
   }
