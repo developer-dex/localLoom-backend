@@ -32,7 +32,9 @@ export class AuthController {
 
   userVerifyOtp = asyncHandler(async (req: Request, res: Response) => {
     const dto: UserVerifyOtpDto = req.body;
+    console.log("dto_______", dto)
     const result = await this.authService.userVerifyOtp(dto);
+    console.log("result_______", result)
     ApiResponse.success(res, result, AUTH_MESSAGES.LOGIN_SUCCESS);
   });
 
