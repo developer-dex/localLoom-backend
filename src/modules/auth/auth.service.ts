@@ -201,51 +201,67 @@ export class AuthService {
    */
   async userVerifyOtp(dto: UserVerifyOtpDto): Promise<{ user: User; tokens: TokenPair }> {
     const { identifier, identifierType, code } = dto;
+    console.log('[verify-otp] START — identifier:', identifier, 'type:', identifierType);
 
     // Dev mode bypass for PHONE only — devCode skips DB lookup
     if (!env.isProduction && identifierType === 'phone' && code === env.otp.devCode) {
+      console.log('[verify-otp] Dev mode bypass triggered');
       const user = await this.authRepository.findUserByPhone(identifier);
+      console.log('[verify-otp] User found by phone:', user?.id ?? 'NOT FOUND');
       if (!user) {
         throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID);
       }
       if (!user.isPhoneVerified) {
         await this.authRepository.setPhoneVerified(user.id);
+        console.log('[verify-otp] Phone verified set to true');
       }
       await this.authRepository.updateLastLogin(user.id);
+      console.log('[verify-otp] Last login updated');
       const tokens = this.generateTokens(user);
+      console.log('[verify-otp] Tokens generated');
       await this.authRepository.updateRefreshToken(user.id, tokens.refreshToken);
+      console.log('[verify-otp] Refresh token stored');
       const freshUser = await this.authRepository.findUserById(user.id);
+      console.log('[verify-otp] Fresh user fetched, returning response');
       return { user: freshUser!, tokens };
     }
 
     // For email (all modes) and phone in production — verify against DB
+    console.log('[verify-otp] Looking up OTP from DB for', identifierType, identifier);
     const otp =
       identifierType === 'phone'
         ? await this.authRepository.findLatestValidOtp(identifier, OtpPurpose.LOGIN)
         : await this.authRepository.findLatestValidOtpByEmail(identifier, OtpPurpose.LOGIN);
 
+    console.log('[verify-otp] OTP record found:', otp?.id ?? 'NOT FOUND');
     if (!otp) {
       throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID);
     }
 
     // Check expiry
     if (new Date() > otp.expiresAt) {
+      console.log('[verify-otp] OTP expired at:', otp.expiresAt);
       throw new BadRequestException(AUTH_MESSAGES.OTP_EXPIRED);
     }
 
     // Check max attempts
     if (otp.attempts >= otp.maxAttempts) {
+      console.log('[verify-otp] Max attempts exceeded:', otp.attempts, '/', otp.maxAttempts);
       throw new BadRequestException(AUTH_MESSAGES.OTP_MAX_ATTEMPTS);
     }
 
     // Verify code
     if (otp.code !== code) {
+      console.log('[verify-otp] Code mismatch — expected:', otp.code, 'got:', code);
       await this.authRepository.incrementOtpAttempts(otp.id);
       throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID);
     }
 
+    console.log('[verify-otp] OTP code matched');
+
     // Mark OTP as used
     await this.authRepository.markOtpUsed(otp.id);
+    console.log('[verify-otp] OTP marked as used');
 
     // Fetch the user
     const user =
@@ -253,6 +269,7 @@ export class AuthService {
         ? await this.authRepository.findUserByPhone(identifier)
         : await this.authRepository.findUserByEmail(identifier);
 
+    console.log('[verify-otp] User fetched:', user?.id ?? 'NOT FOUND');
     if (!user) {
       throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID);
     }
@@ -260,16 +277,21 @@ export class AuthService {
     // Set isPhoneVerified if phone channel
     if (identifierType === 'phone' && !user.isPhoneVerified) {
       await this.authRepository.setPhoneVerified(user.id);
+      console.log('[verify-otp] Phone verified set to true');
     }
 
     // Update last login
     await this.authRepository.updateLastLogin(user.id);
+    console.log('[verify-otp] Last login updated');
 
     // Generate and store tokens
     const tokens = this.generateTokens(user);
+    console.log('[verify-otp] Tokens generated');
     await this.authRepository.updateRefreshToken(user.id, tokens.refreshToken);
+    console.log('[verify-otp] Refresh token stored');
 
     const freshUser = await this.authRepository.findUserById(user.id);
+    console.log('[verify-otp] Fresh user fetched, returning response');
     return { user: freshUser!, tokens };
   }
 
