@@ -8,10 +8,12 @@ export const sequelize = new Sequelize(env.db.name, env.db.user, env.db.password
   dialect: 'postgres',
   logging: env.isDevelopment ? (msg) => logger.debug(msg) : false,
   dialectOptions: {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false,
-    },
+    ...(env.isProduction && {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    }),
     connectTimeoutMS: 60000,
   },
   pool: {
