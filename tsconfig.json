@@ -13,22 +13,9 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node10",
-    "baseUrl": "./src",
-    "paths": {
-      "@config/*": ["config/*"],
-      "@common/*": ["common/*"],
-      "@middleware/*": ["middleware/*"],
-      "@models/*": ["models/*"],
-      "@modules/*": ["modules/*"],
-      "@socket/*": ["socket/*"],
-      "@routes/*": ["routes/*"],
-      "@docs/*": ["docs/*"]
-    },
     "typeRoots": ["./node_modules/@types", "./src/common/types"],
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "ignoreDeprecations": "5.0"
+    "experimentalDecorators": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
