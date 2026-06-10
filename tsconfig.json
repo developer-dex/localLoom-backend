@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "ignoreDeprecations": "5.0",
     "target": "ES2022",
     "module": "commonjs",
     "lib": ["ES2022"],
@@ -14,7 +13,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node",
+    "moduleResolution": "node10",
     "baseUrl": "./src",
     "paths": {
       "@config/*": ["config/*"],
@@ -28,7 +27,8 @@
     },
     "typeRoots": ["./node_modules/@types", "./src/common/types"],
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
