@@ -451,6 +451,16 @@
  *                 type: string
  *                 description: JSON string with ABN lookup result
  *                 example: '{"businessName":"Smith Plumbing Pty Ltd","status":"Active","entityType":"Australian Private Company"}'
+ *               licenseNumber:
+ *                 type: string
+ *                 maxLength: 50
+ *                 description: Optional trade license number
+ *                 example: "LIC-2024-98765"
+ *               licenseExpiryDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Optional license expiry date (YYYY-MM-DD)
+ *                 example: "2027-06-30"
  *               businessImage:
  *                 type: string
  *                 format: binary

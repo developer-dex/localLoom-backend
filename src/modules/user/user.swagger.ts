@@ -35,10 +35,16 @@
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  *   patch:
- *     summary: Update my profile
+ *     summary: Update my profile (name, email, phone)
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
+ *     description: |
+ *       Updates the authenticated user's profile. All fields are optional — only provide the ones you want to change.
+ *
+ *       Uniqueness checks:
+ *       - `email` — must not be in use by another user (409 if taken).
+ *       - `phone` — must not be in use by another user (409 if taken). Must be E.164 format.
  *     requestBody:
  *       required: true
  *       content:
@@ -48,11 +54,17 @@
  *             properties:
  *               name:
  *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 100
  *                 example: John Doe
  *               email:
  *                 type: string
  *                 format: email
  *                 example: john@example.com
+ *               phone:
+ *                 type: string
+ *                 description: E.164 format
+ *                 example: "+61412345678"
  *     responses:
  *       200:
  *         description: User updated
@@ -76,6 +88,22 @@
  *         $ref: '#/components/responses/ValidationError'
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
+ *       409:
+ *         description: Email or phone already in use by another account
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 409
+ *                 message:
+ *                   type: string
+ *                   example: Email is already in use by another account
  *   delete:
  *     summary: Soft-delete my account
  *     tags: [Users]

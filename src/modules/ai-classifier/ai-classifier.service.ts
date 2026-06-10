@@ -66,6 +66,10 @@ export class AiClassifierService {
       // 3. Build system prompt
       const systemPrompt = buildClassifierSystemPrompt(catalog);
 
+      console.log('[ai-classifier] Catalog categories:', catalog.categories.map(c => c.name));
+      console.log('[ai-classifier] Catalog regions:', catalog.regions.map(r => r.name));
+      console.log('[ai-classifier] User prompt:', prompt);
+
       // 4. Call Anthropic with one-retry on invalid JSON
       let retried = false;
       let result: ClassificationResult;
@@ -75,6 +79,7 @@ export class AiClassifierService {
           systemPrompt,
           userPrompt: prompt,
         });
+        console.log('[ai-classifier] Raw model response:', response.rawText);
         result = parseAndValidateModelResponse(response.rawText, catalog);
 
         this.log.info('classify_request_completed', {
@@ -104,6 +109,7 @@ export class AiClassifierService {
           systemPrompt,
           userPrompt: prompt,
         });
+        console.log('[ai-classifier] Raw model response (retry):', retryResponse.rawText);
 
         try {
           result = parseAndValidateModelResponse(retryResponse.rawText, catalog);

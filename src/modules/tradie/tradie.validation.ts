@@ -41,6 +41,10 @@ export const setupTradieProfileSchema = Joi.object({
     }),
     Joi.string(),
   ).optional(),
+  licenseNumber: Joi.string().trim().max(50).optional().allow(''),
+  licenseExpiryDate: Joi.string().isoDate().optional().allow('').messages({
+    'string.isoDate': 'licenseExpiryDate must be a valid date (YYYY-MM-DD)',
+  }),
 });
 
 export const tradieIdParamSchema = Joi.object({

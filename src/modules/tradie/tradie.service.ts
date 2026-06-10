@@ -246,6 +246,9 @@ export class TradieService {
         businessImages: dto.businessImageUrl ? [dto.businessImageUrl] : [],
         yearsOfExperience: 0,
         termsAcceptedAt: new Date(),
+        hasLicense: !!dto.licenseNumber,
+        licenseNumber: dto.licenseNumber || null,
+        licenseExpiryDate: dto.licenseExpiryDate ? new Date(dto.licenseExpiryDate) : null,
       });
       await this.repo.setServices(profile.id, categoryIds);
       await this.repo.setRegions(profile.id, regionIds);
@@ -261,6 +264,11 @@ export class TradieService {
         timeTo: dto.timeTo,
         openDays,
         isEmergencyAvailable: dto.isEmergencyAvailable ?? existing.isEmergencyAvailable,
+        hasLicense: dto.licenseNumber ? true : existing.hasLicense,
+        licenseNumber: dto.licenseNumber !== undefined ? (dto.licenseNumber || null) : existing.licenseNumber,
+        licenseExpiryDate: dto.licenseExpiryDate !== undefined
+          ? (dto.licenseExpiryDate ? new Date(dto.licenseExpiryDate) : null)
+          : existing.licenseExpiryDate,
       };
       if (dto.businessVideoUrl) updateData.introVideoUrl = dto.businessVideoUrl;
       if (dto.businessImageUrl) {

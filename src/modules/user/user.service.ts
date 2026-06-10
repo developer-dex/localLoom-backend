@@ -1,7 +1,7 @@
 import { UserRepository } from './user.repository';
 import { UpdateUserDto } from './user.interface';
 import { User, TradieProfile } from '../../models';
-import { NotFoundException } from '../../common/exceptions';
+import { NotFoundException, ConflictException } from '../../common/exceptions';
 import { USER_MESSAGES } from '../../common/constants';
 
 export class UserService {
@@ -31,6 +31,22 @@ export class UserService {
   }
 
   async updateMe(userId: string, dto: UpdateUserDto): Promise<User> {
+    // Check email uniqueness (exclude current user)
+    if (dto.email) {
+      const emailTaken = await this.userRepository.emailExistsExcluding(dto.email, userId);
+      if (emailTaken) {
+        throw new ConflictException('Email is already in use by another account');
+      }
+    }
+
+    // Check phone uniqueness (exclude current user)
+    if (dto.phone) {
+      const phoneTaken = await this.userRepository.phoneExistsExcluding(dto.phone, userId);
+      if (phoneTaken) {
+        throw new ConflictException('Phone number is already in use by another account');
+      }
+    }
+
     const user = await this.userRepository.update(userId, dto);
     if (!user) {
       throw new NotFoundException(USER_MESSAGES.NOT_FOUND);

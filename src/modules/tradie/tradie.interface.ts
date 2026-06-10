@@ -16,6 +16,8 @@ export interface SetupTradieProfileDto {
   isEmergencyAvailable?: boolean;
   abn: string;
   abnData?: AbnData;
+  licenseNumber?: string;
+  licenseExpiryDate?: string;
   // resolved from uploaded files
   businessImageUrl?: string;
   businessVideoUrl?: string;
