@@ -1,8 +1,7 @@
 {
-  "compilerOptions": {
-    "ignoreDeprecations": "5.0",
+  "compilerOptions": {    // ← Change from "5.0" to "6.0"
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "node16",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
@@ -14,7 +13,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node",
+    "moduleResolution": "node16",       // ← Keep this for now (silenced by ignoreDeprecations)
     "baseUrl": "./src",
     "paths": {
       "@config/*": ["config/*"],
