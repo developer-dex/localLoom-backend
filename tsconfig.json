@@ -14,7 +14,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "node16",       // ← Keep this for now (silenced by ignoreDeprecations)
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
       "@config/*": ["config/*"],
       "@common/*": ["common/*"],
