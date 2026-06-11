@@ -14,7 +14,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "node16",
-    "ignoreDeprecations": "5.0",     // ← Add this line
+    "ignoreDeprecations": "6.0",     // ← Add this line
     "baseUrl": "./src",
     "paths": {
       "@config/*": ["config/*"],
