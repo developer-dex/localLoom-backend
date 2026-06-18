@@ -194,6 +194,64 @@ export class AuthService {
   }
 
   /**
+   * Resend OTP to the user's phone or email.
+   * Invalidates any previous OTPs and generates a fresh one.
+   */
+  async resendOtp(identifier: string, identifierType: 'phone' | 'email'): Promise<{ identifierType: string; maskedIdentifier: string }> {
+    // Look up user by identifier
+    let user: User | null;
+    if (identifierType === 'phone') {
+      user = await this.authRepository.findUserByPhone(identifier);
+      if (!user) {
+        throw new NotFoundException('No account found with this phone number');
+      }
+    } else {
+      user = await this.authRepository.findUserByEmail(identifier);
+      if (!user) {
+        throw new NotFoundException('No account found with this email address');
+      }
+    }
+
+    // Check account status
+    if (user.status === AccountStatus.SUSPENDED) {
+      throw new ForbiddenException(AUTH_MESSAGES.ACCOUNT_SUSPENDED);
+    }
+    if (user.status === AccountStatus.DELETED) {
+      throw new ForbiddenException(AUTH_MESSAGES.ACCOUNT_DELETED);
+    }
+
+    const code = generateOTP(6);
+    const isDevMode = !env.isProduction;
+    const expiresAt = new Date(Date.now() + env.otp.expiryMinutes * 60 * 1000);
+
+    if (identifierType === 'phone') {
+      const phoneCode = isDevMode ? env.otp.devCode : code;
+      await this.authRepository.invalidateOtpsForPhone(identifier, OtpPurpose.LOGIN);
+      await this.authRepository.createOtp({
+        phone: identifier,
+        code: phoneCode,
+        purpose: OtpPurpose.LOGIN,
+        expiresAt,
+      });
+      if (!isDevMode) {
+        await this.smsService.sendOtp(identifier, phoneCode);
+      }
+    } else {
+      await this.authRepository.invalidateOtpsForEmail(identifier, OtpPurpose.LOGIN);
+      await this.authRepository.createOtpWithEmail({
+        email: identifier,
+        code,
+        purpose: OtpPurpose.LOGIN,
+        expiresAt,
+      });
+      await this.emailService.sendOtp(identifier, code);
+    }
+
+    const maskedIdentifier = identifierType === 'phone' ? maskPhone(identifier) : maskEmail(identifier);
+    return { identifierType, maskedIdentifier };
+  }
+
+  /**
    * Verify OTP for a customer login (phone or email) and return tokens.
    * Dev mode: phone accepts devCode (123456) without DB lookup.
    *           email always verifies against the real OTP stored in DB.

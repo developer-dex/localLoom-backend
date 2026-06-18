@@ -12,6 +12,7 @@ export interface ITradieProfileAttributes {
   businessImages?: string[] | null;
   abn: string;
   abnVerified: boolean;
+  businessNumber?: string | null;
   yearsOfExperience: number;
   bio?: string | null;
   introVideoUrl?: string | null;
@@ -49,7 +50,7 @@ export interface ITradieProfileAttributes {
 
 export type ITradieProfileCreationAttributes = Optional<ITradieProfileAttributes,
   'id' | 'businessName' | 'businessLocation' | 'serviceDescription' | 'website' | 'businessImages' |
-  'abnVerified' | 'bio' | 'introVideoUrl' | 'awards' | 'profilePhoto' | 'serviceRadiusKm' |
+  'abnVerified' | 'businessNumber' | 'bio' | 'introVideoUrl' | 'awards' | 'profilePhoto' | 'serviceRadiusKm' |
   'tradeLicenseUrl' | 'publicLiabilityInsuranceUrl' | 'idProofUrl' |
   'profileStatus' | 'rejectionReason' |
   'hasLicense' | 'licenseNumber' | 'licenseExpiryDate' |
@@ -68,6 +69,7 @@ export class TradieProfile extends Model<ITradieProfileAttributes, ITradieProfil
   declare businessImages: string[] | null;
   declare abn: string;
   declare abnVerified: boolean;
+  declare businessNumber: string | null;
   declare yearsOfExperience: number;
   declare bio: string | null;
   declare introVideoUrl: string | null;
@@ -113,6 +115,7 @@ TradieProfile.init(
     businessImages: { type: DataTypes.JSONB, allowNull: true, defaultValue: [], field: 'business_images' },
     abn: { type: DataTypes.STRING(20), allowNull: false },
     abnVerified: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'abn_verified' },
+    businessNumber: { type: DataTypes.STRING(50), allowNull: true, field: 'business_number' },
     yearsOfExperience: { type: DataTypes.INTEGER, allowNull: false, field: 'years_of_experience' },
     bio: { type: DataTypes.TEXT, allowNull: true },
     introVideoUrl: { type: DataTypes.STRING(500), allowNull: true, field: 'intro_video_url' },

@@ -5,6 +5,7 @@ import { adminRegionsRoutes } from '../../modules/admin-regions';
 import { adminTradiesRoutes } from '../../modules/admin-tradies';
 import { adminReviewsRoutes } from '../../modules/admin-reviews';
 import { adminUsersRoutes } from '../../modules/admin-users';
+import { adminHelpDeskRoutes } from '../../modules/admin-help-desk';
 import { authenticateAdmin } from '../../middleware';
 
 const router = Router();
@@ -22,6 +23,7 @@ router.use('/regions', adminRegionsRoutes);
 router.use('/tradies', adminTradiesRoutes);
 router.use('/reviews', adminReviewsRoutes);
 router.use('/users', adminUsersRoutes);
+router.use('/help-desk', adminHelpDeskRoutes);
 
 export default router;
   

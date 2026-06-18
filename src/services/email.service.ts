@@ -66,4 +66,31 @@ export class EmailService {
     logger.info(`[DEV] OTP for ${email}: ${code}`);
     return true;
   }
+
+  /**
+   * Send a raw email with custom subject, text, and html.
+   */
+  async sendRaw(options: { to: string; subject: string; text: string; html: string }): Promise<boolean> {
+    if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from: this.from,
+          to: options.to,
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+        });
+        logger.info(`Email sent to ${options.to}: ${options.subject}`);
+        return true;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown email provider error';
+        logger.error(`Failed to send email to ${options.to}: ${msg}`);
+        throw new Error(`Failed to send email: ${msg}`);
+      }
+    }
+
+    // Dev mode — log and return true
+    logger.info(`[DEV] Email to ${options.to}: ${options.subject}`);
+    return true;
+  }
 }

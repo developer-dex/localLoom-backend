@@ -8,6 +8,7 @@ import { chatRoutes } from '../../modules/chat';
 import { reviewRoutes } from '../../modules/review';
 import { favouriteRoutes } from '../../modules/favourite';
 import { aiClassifierRoutes } from '../../modules/ai-classifier';
+import { helpDeskRoutes } from '../../modules/help-desk';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/chat', chatRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/favourites', favouriteRoutes);
 router.use('/ai', aiClassifierRoutes);
+router.use('/help-desk', helpDeskRoutes);
 
 export default router;

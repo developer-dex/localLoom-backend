@@ -16,6 +16,7 @@ import { DeviceToken } from './device-token.model';
 import { Conversation } from './conversation.model';
 import { Message } from './message.model';
 import { Report } from './report.model';
+import { HelpDeskRequest } from './help-desk-request.model';
 
 // ═══════════════════════════════════════════
 // ASSOCIATIONS
@@ -147,3 +148,6 @@ export type { IMessageAttributes, IMessageCreationAttributes } from './message.m
 
 export { Report } from './report.model';
 export type { IReportAttributes, IReportCreationAttributes } from './report.model';
+
+export { HelpDeskRequest } from './help-desk-request.model';
+export type { IHelpDeskRequestAttributes, IHelpDeskRequestCreationAttributes } from './help-desk-request.model';

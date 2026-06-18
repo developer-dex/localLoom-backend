@@ -6,6 +6,7 @@ export interface AbnData {
 
 export interface SetupTradieProfileDto {
   businessName: string;
+  businessNumber?: string;
   categoryIds: string[];
   regionIds: string[];
   serviceDescription?: string;

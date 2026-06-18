@@ -3,7 +3,7 @@ import { AuthService } from './auth.service';
 import { ApiResponse, asyncHandler } from '../../common/utils';
 import { AuthenticatedRequest } from '../../common/interfaces';
 import { AUTH_MESSAGES } from '../../common/constants';
-import { SendOtpDto, VerifyOtpDto, EmailLoginDto, EmailRegisterDto, UserSignupDto, UserLoginDto, UserVerifyOtpDto } from './auth.interface';
+import { SendOtpDto, VerifyOtpDto, EmailLoginDto, EmailRegisterDto, UserSignupDto, UserLoginDto, UserVerifyOtpDto, ResendOtpDto } from './auth.interface';
 import { getFileUrl } from '../../services/file-upload.service';
 
 export class AuthController {
@@ -36,6 +36,12 @@ export class AuthController {
     const result = await this.authService.userVerifyOtp(dto);
     console.log("result_______", result)
     ApiResponse.success(res, result, AUTH_MESSAGES.LOGIN_SUCCESS);
+  });
+
+  resendOtp = asyncHandler(async (req: Request, res: Response) => {
+    const { identifier, identifierType }: ResendOtpDto = req.body;
+    const result = await this.authService.resendOtp(identifier, identifierType);
+    ApiResponse.success(res, result, AUTH_MESSAGES.OTP_SENT);
   });
 
   // ── Phone + OTP ──

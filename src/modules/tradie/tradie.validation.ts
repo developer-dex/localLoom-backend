@@ -15,6 +15,7 @@ const csvOrArray = (itemSchema: Joi.Schema) =>
 
 export const setupTradieProfileSchema = Joi.object({
   businessName: Joi.string().trim().max(200).required(),
+  businessNumber: Joi.string().trim().max(50).optional().allow(''),
   categoryIds: csvOrArray(Joi.string().uuid()).required(),
   regionIds: csvOrArray(Joi.string().uuid()).required(),
   serviceDescription: Joi.string().trim().max(2000).optional().allow(''),

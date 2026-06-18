@@ -271,6 +271,113 @@
 
 /**
  * @swagger
+ * /auth/resend-otp:
+ *   post:
+ *     summary: Resend OTP to phone or email
+ *     tags: [Auth]
+ *     description: |
+ *       Invalidates any previously issued OTPs for the given identifier and sends a fresh OTP.
+ *       Sends via SMS when `identifierType` is `phone`, or via email when `identifierType` is `email`.
+ *       This endpoint is public and does not require authentication. Rate limited.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - identifier
+ *               - identifierType
+ *             properties:
+ *               identifier:
+ *                 type: string
+ *                 description: Phone number (E.164) or email address depending on identifierType
+ *                 example: "+61412345678"
+ *               identifierType:
+ *                 type: string
+ *                 enum: [phone, email]
+ *                 description: Channel to send the OTP through
+ *                 example: phone
+ *     responses:
+ *       200:
+ *         description: OTP resent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: OTP sent successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     identifierType:
+ *                       type: string
+ *                       example: phone
+ *                     maskedIdentifier:
+ *                       type: string
+ *                       example: "+61****5678"
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 400
+ *                 message:
+ *                   type: string
+ *                   example: '"identifier" is required'
+ *       403:
+ *         description: Account suspended or deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 403
+ *                 message:
+ *                   type: string
+ *                   example: Account has been suspended
+ *       404:
+ *         description: No account found with this identifier
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 404
+ *                 message:
+ *                   type: string
+ *                   example: No account found with this phone number
+ *       429:
+ *         description: Too many requests
+ */
+
+/**
+ * @swagger
  * /auth/refresh-token:
  *   post:
  *     summary: Refresh access token

@@ -44,6 +44,11 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+export interface ResendOtpDto {
+  identifier: string;
+  identifierType: 'phone' | 'email';
+}
+
 export interface RefreshTokenDto {
   refreshToken: string;
 }
