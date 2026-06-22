@@ -53,7 +53,7 @@ export class AbnLookupService {
 
     // Dev mode — skip the real ABR API entirely and return mock data.
     // Triggered when running in development OR when no ABN_LOOKUP_GUID is configured.
-    if (env.isDevelopment || !this.guid) {
+    // if (env.isDevelopment || !this.guid) {
       logger.info(`[DEV] ABN lookup for ${cleanAbn} — returning mock data`);
       return {
         abn: cleanAbn,
@@ -64,42 +64,42 @@ export class AbnLookupService {
         postcode: '3000',
         isActive: true,
       };
-    }
+    // }
 
-    try {
-      // NOTE: do NOT pass a `callback` query parameter — when present, ABR
-      // returns a JSONP envelope of the form `callback({...})` which breaks
-      // JSON.parse. Without it, ABR returns plain JSON.
-      const url = `${this.baseUrl}?abn=${encodeURIComponent(cleanAbn)}&guid=${encodeURIComponent(this.guid)}`;
-      const response = await fetch(url);
+    // try {
+    //   // NOTE: do NOT pass a `callback` query parameter — when present, ABR
+    //   // returns a JSONP envelope of the form `callback({...})` which breaks
+    //   // JSON.parse. Without it, ABR returns plain JSON.
+    //   const url = `${this.baseUrl}?abn=${encodeURIComponent(cleanAbn)}&guid=${encodeURIComponent(this.guid)}`;
+    //   const response = await fetch(url);
 
-      if (!response.ok) {
-        throw new Error(`ABR responded with HTTP ${response.status} ${response.statusText}`.trim());
-      }
+    //   if (!response.ok) {
+    //     throw new Error(`ABR responded with HTTP ${response.status} ${response.statusText}`.trim());
+    //   }
 
-      const text = await response.text();
-      const json = parseAbrPayload(text);
+    //   const text = await response.text();
+    //   const json = parseAbrPayload(text);
 
-      if (json.Message) {
-        throw new Error(json.Message);
-      }
+    //   if (json.Message) {
+    //     throw new Error(json.Message);
+    //   }
 
-      const isActive = json.AbnStatus === 'Active';
-      const entityName = json.EntityName || json.BusinessName?.[0]?.organisationName || '';
+    //   const isActive = json.AbnStatus === 'Active';
+    //   const entityName = json.EntityName || json.BusinessName?.[0]?.organisationName || '';
 
-      return {
-        abn: json.Abn,
-        abnStatus: json.AbnStatus,
-        entityName,
-        entityType: json.EntityTypeName || '',
-        state: json.AddressState || '',
-        postcode: json.AddressPostcode || '',
-        isActive,
-      };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`ABN lookup failed for ${cleanAbn}: ${msg}`);
-      throw new Error(`ABN lookup failed: ${msg}`);
-    }
+    //   return {
+    //     abn: json.Abn,
+    //     abnStatus: json.AbnStatus,
+    //     entityName,
+    //     entityType: json.EntityTypeName || '',
+    //     state: json.AddressState || '',
+    //     postcode: json.AddressPostcode || '',
+    //     isActive,
+    //   };
+    // } catch (error) {
+    //   const msg = error instanceof Error ? error.message : 'Unknown error';
+    //   logger.error(`ABN lookup failed for ${cleanAbn}: ${msg}`);
+    //   throw new Error(`ABN lookup failed: ${msg}`);
+    // }
   }
 }
