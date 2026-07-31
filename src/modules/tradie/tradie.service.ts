@@ -5,7 +5,7 @@ import { NotFoundException, ConflictException, BadRequestException, ForbiddenExc
 import { TRADIE_MESSAGES } from '../../common/constants';
 import { PaginatedResult } from '../../common/interfaces';
 import { AbnLookupService, AbnLookupResult } from '../../services/abn-lookup.service';
-import { UserRole } from '../../common/enums';
+import { UserRole, ProfileStatus } from '../../common/enums';
 import { Op } from 'sequelize';
 import { env } from '../../config/env';
 
@@ -250,6 +250,7 @@ export class TradieService {
         hasLicense: !!dto.licenseNumber,
         licenseNumber: dto.licenseNumber || null,
         licenseExpiryDate: dto.licenseExpiryDate ? new Date(dto.licenseExpiryDate) : null,
+        profileStatus: ProfileStatus.APPROVED,
       });
       await this.repo.setServices(profile.id, categoryIds);
       await this.repo.setRegions(profile.id, regionIds);
@@ -271,6 +272,7 @@ export class TradieService {
         licenseExpiryDate: dto.licenseExpiryDate !== undefined
           ? (dto.licenseExpiryDate ? new Date(dto.licenseExpiryDate) : null)
           : existing.licenseExpiryDate,
+        profileStatus: ProfileStatus.APPROVED,
       };
       if (dto.businessVideoUrl) updateData.introVideoUrl = dto.businessVideoUrl;
       if (dto.businessImageUrl) {

@@ -1,970 +1,1116 @@
-# LocalLoom Backend — AWS Deployment Guide
+# LocalLoom AWS Deployment Guide — Plan A (EC2 + RDS)
 
-> A step-by-step guide to deploy your backend on AWS with automatic builds when you push to `main`.
-> No DevOps experience needed. Just follow along.
-
----
-
-## Table of Contents
-
-1. [What We're Building](#what-were-building)
-2. [Prerequisites](#prerequisites)
-3. [Solution 1: With Docker (Recommended)](#solution-1-with-docker-recommended)
-4. [Solution 2: Without Docker](#solution-2-without-docker)
-5. [Files You Need to Add to Your Codebase](#files-you-need-to-add-to-your-codebase)
-6. [Common Issues & Fixes](#common-issues--fixes)
-
----
-
-## What We're Building
+## Architecture Overview
 
 ```
-You push code to "main" branch on GitHub
-        ↓
-AWS detects the push automatically
-        ↓
-AWS builds your new code
-        ↓
-Old code keeps running and serving requests (zero downtime)
-        ↓
-New code is ready → AWS switches traffic to new code
-        ↓
-Done! Users never noticed a thing
+Internet → Route 53 (DNS) → ALB (HTTPS/WSS) → EC2 (t3.small, Docker) → RDS PostgreSQL
+                                                                       → S3 (uploads)
+                                                                       → ECR (images)
 ```
 
-We'll use these AWS services:
-- **EC2** — A virtual server (like your computer but in the cloud)
-- **ECR** — A place to store your Docker images (Solution 1 only)
-- **CodePipeline** — Watches your GitHub repo and triggers builds automatically
-- **CodeBuild** — Builds your code in the cloud
-- **CodeDeploy** — Deploys the new code to your server with zero downtime
-- **MongoDB Atlas** — Your database (free tier available, easier than self-hosting)
+**Estimated Monthly Cost: ~$55–60 USD**
 
 ---
 
 ## Prerequisites
 
-Before starting, make sure you have:
+1. An AWS account (with billing enabled)
+2. AWS CLI installed locally (`brew install awscli` or download from https://aws.amazon.com/cli/)
+3. A registered domain name (e.g., `localloom.com.au`)
+4. Docker installed locally
+5. Your LocalLoom backend code ready to build
 
-- [ ] An **AWS Account** — [Sign up here](https://aws.amazon.com/free/) (free tier available)
-- [ ] A **GitHub Account** with your code pushed to a repository
-- [ ] **AWS CLI** installed on your computer
-- [ ] **MongoDB Atlas** account (free) — [Sign up here](https://www.mongodb.com/cloud/atlas/register)
+---
 
-### Install AWS CLI
+## Step 1: Set Up AWS CLI & IAM User
 
-```bash
-# Linux
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
+> **What is IAM?** IAM (Identity and Access Management) is how AWS manages who can access what. Think of it like creating a user account with specific permissions. You create a "deployer" user that has permission to create servers, databases, etc. — rather than using your root account (which has unlimited access and is risky to use daily).
+>
+> **Why do we need this?** The AWS CLI on your laptop needs credentials to talk to AWS. The IAM user's access key is like a username+password that your terminal uses to create resources on your behalf.
 
-# Verify
-aws --version
-```
+### 1.1 Create an IAM User for deployment
 
-### Configure AWS CLI
+**AWS Console UI Steps:**
+
+1. Sign in to AWS Console at https://console.aws.amazon.com
+2. In the top search bar, type **IAM** and click on "IAM" service
+3. In the left sidebar, click **Users**
+4. Click the **Create user** button (top right)
+5. Enter User name: `localloom-deployer`
+6. Do NOT check "Provide user access to the AWS Management Console"
+7. Click **Next**
+8. On "Set permissions" page:
+   - Select **Attach policies directly**
+   - Search and check each of these policies:
+     - `AmazonEC2FullAccess`
+     - `AmazonRDSFullAccess`
+     - `AmazonS3FullAccess`
+     - `AmazonVPCFullAccess`
+     - `ElasticLoadBalancingFullAccess`
+     - `AmazonRoute53FullAccess`
+     - `AmazonEC2ContainerRegistryFullAccess`
+     - `SecretsManagerReadWrite`
+9. Click **Next** → Review → **Create user**
+
+### 1.2 Create Access Key
+
+**AWS Console UI Steps:**
+
+1. Click on user name `localloom-deployer` from the Users list
+2. Click the **Security credentials** tab
+3. Scroll down to **Access keys** section
+4. Click **Create access key**
+5. Select use case: **Command Line Interface (CLI)**
+6. Check the confirmation checkbox at bottom
+7. Click **Next**
+8. (Optional) Add description: `localloom-deployment-key`
+9. Click **Create access key**
+10. You'll see:
+    - **Access key ID** (e.g., `AKIAIOSFODNN7EXAMPLE`)
+    - **Secret access key** (e.g., `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`)
+11. Click **Download .csv file** — save somewhere safe
+12. Click **Done**
+
+> WARNING: Secret access key is shown ONLY ONCE. If lost, create a new one.
+
+### 1.3 Configure AWS CLI
 
 ```bash
 aws configure
+# AWS Access Key ID: <your-key-from-step-above>
+# AWS Secret Access Key: <your-secret-from-step-above> 
+# Default region: ap-southeast-2  (Sydney)
+# Default output format: json
 ```
-
-It will ask you 4 things:
-- **AWS Access Key ID** — Get from AWS Console → IAM → Users → Your User → Security Credentials
-- **AWS Secret Access Key** — Same place as above
-- **Default region** — Use `us-east-1` (or whichever is closest to your users)
-- **Default output format** — Type `json`
-
-### Set Up MongoDB Atlas (Your Database)
-
-Instead of running MongoDB on EC2 (which is complex to manage), use MongoDB Atlas:
-
-1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Create a free cluster (M0 tier — completely free)
-3. Click **"Connect"** → **"Connect your application"**
-4. Copy the connection string. It looks like:
-   ```
-   mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/localloom?retryWrites=true&w=majority
-   ```
-5. In the Atlas dashboard, go to **Network Access** → **Add IP Address** → **Allow Access from Anywhere** (0.0.0.0/0)
-   - Later you can restrict this to only your EC2 IP for security
-
-Save this connection string — you'll need it later.
 
 ---
 
-## Solution 1: With Docker (Recommended)
+## Step 2: Create VPC & Networking
 
-This uses your existing `Dockerfile`. AWS builds a Docker image, pushes it to ECR, and deploys it to EC2.
+> **What is a VPC?** VPC (Virtual Private Cloud) is your own private network inside AWS. It's like having your own isolated section of the internet where only your services live. Nothing from outside can reach your servers unless you explicitly allow it.
+>
+> **What are Subnets?** Subnets divide your VPC into smaller sections. **Public subnets** can be reached from the internet (for your EC2 and Load Balancer). **Private subnets** are hidden from the internet (for your database — you don't want anyone from the internet connecting directly to your PostgreSQL).
+>
+> **What is an Internet Gateway?** It's the "door" that connects your VPC to the public internet. Without it, nothing in your VPC can reach the outside world or be reached from it.
+>
+> **Why 2 Availability Zones?** AWS requires at least 2 AZs for the Load Balancer and RDS. AZs are physically separate data centers in the same region — if one goes down, the other keeps running.
 
-### Step 1: Create an ECR Repository (Docker Image Storage)
+### AWS Console UI Steps:
 
-```bash
-aws ecr create-repository \
-  --repository-name localloom-backend \
-  --region us-east-1
-```
+1. Go to AWS Console → Search **VPC** → Click "VPC" service
+2. Click **Create VPC** button
+3. Select **VPC and more** (this creates VPC + subnets + IGW + route tables automatically)
+4. Fill in:
+   - Name tag auto-generation: `localloom`
+   - IPv4 CIDR block: `10.0.0.0/16`
+   - Number of Availability Zones: **2**
+   - Number of public subnets: **2**
+   - Number of private subnets: **2**
+   - NAT gateways: **None** (saves ~$32/month)
+   - VPC endpoints: **None**
+5. Click **Create VPC**
+6. Wait for it to complete — note down:
+   - VPC ID (e.g., `vpc-0abc123...`)
+   - Public Subnet 1 ID (in AZ `ap-southeast-2a`)
+   - Public Subnet 2 ID (in AZ `ap-southeast-2b`)
+   - Private Subnet 1 ID (in AZ `ap-southeast-2a`)
+   - Private Subnet 2 ID (in AZ `ap-southeast-2b`)
 
-Note down the **repository URI** from the output. It looks like:
-```
-123456789012.dkr.ecr.us-east-1.amazonaws.com/localloom-backend
-```
+> The "VPC and more" wizard auto-creates the Internet Gateway, route tables, and subnet associations for you.
 
-### Step 2: Launch an EC2 Instance (Your Server)
-
-1. Go to **AWS Console** → **EC2** → **Launch Instance**
-2. Configure:
-   - **Name**: `localloom-backend`
-   - **OS**: Amazon Linux 2023
-   - **Instance type**: `t2.micro` (free tier) or `t3.small` (for production)
-   - **Key pair**: Create a new one → Download the `.pem` file → Keep it safe!
-   - **Network settings**: 
-     - Allow SSH (port 22) — from "My IP" only
-     - Allow HTTP (port 80) — from Anywhere
-     - Allow HTTPS (port 443) — from Anywhere
-     - Allow Custom TCP (port 5000) — from Anywhere
-   - **Storage**: 20 GB gp3
-3. Click **Launch Instance**
-
-### Step 3: Connect to Your EC2 and Install Docker
-
-```bash
-# Connect to your server (replace with your .pem file path and EC2 public IP)
-ssh -i "your-key.pem" ec2-user@YOUR_EC2_PUBLIC_IP
-```
-
-Once connected, run these commands on the server:
+### CLI Alternative:
 
 ```bash
-# Update the system
-sudo yum update -y
+# Create VPC
+aws ec2 create-vpc \
+  --cidr-block 10.0.0.0/16 \
+  --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=localloom-vpc}]'
 
-# Install Docker
-sudo yum install -y docker
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker ec2-user
+# Enable DNS hostnames
+aws ec2 modify-vpc-attribute --vpc-id <vpc-id> --enable-dns-hostnames
+
+# Create Public Subnet 1
+aws ec2 create-subnet \
+  --vpc-id <vpc-id> \
+  --cidr-block 10.0.1.0/24 \
+  --availability-zone ap-southeast-2a \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=localloom-public-1}]'
+
+# Create Public Subnet 2
+aws ec2 create-subnet \
+  --vpc-id <vpc-id> \
+  --cidr-block 10.0.2.0/24 \
+  --availability-zone ap-southeast-2b \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=localloom-public-2}]'
+
+# Create Private Subnet 1
+aws ec2 create-subnet \
+  --vpc-id <vpc-id> \
+  --cidr-block 10.0.10.0/24 \
+  --availability-zone ap-southeast-2a \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=localloom-private-1}]'
+
+# Create Private Subnet 2
+aws ec2 create-subnet \
+  --vpc-id <vpc-id> \
+  --cidr-block 10.0.11.0/24 \
+  --availability-zone ap-southeast-2b \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=localloom-private-2}]'
+
+# Create Internet Gateway
+aws ec2 create-internet-gateway \
+  --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=localloom-igw}]'
+
+# Attach IGW to VPC
+aws ec2 attach-internet-gateway --internet-gateway-id <igw-id> --vpc-id <vpc-id>
+
+# Create public route table
+aws ec2 create-route-table \
+  --vpc-id <vpc-id> \
+  --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=localloom-public-rt}]'
+
+# Add internet route
+aws ec2 create-route \
+  --route-table-id <rtb-id> \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id <igw-id>
+
+# Associate public subnets
+aws ec2 associate-route-table --route-table-id <rtb-id> --subnet-id <public-subnet-1-id>
+aws ec2 associate-route-table --route-table-id <rtb-id> --subnet-id <public-subnet-2-id>
+
+# Enable auto-assign public IP on public subnets
+aws ec2 modify-subnet-attribute --subnet-id <public-subnet-1-id> --map-public-ip-on-launch
+aws ec2 modify-subnet-attribute --subnet-id <public-subnet-2-id> --map-public-ip-on-launch
+```
+
+---
+
+## Step 3: Create Security Groups
+
+> **What are Security Groups?** Security Groups are firewalls for your AWS resources. They define which traffic is allowed IN and OUT. Think of them as bouncers at a door — they check where traffic is coming from and only let approved traffic through.
+>
+> **Why 3 separate groups?**
+> - **ALB SG**: Allows HTTP/HTTPS from the entire internet (because users need to access your API)
+> - **EC2 SG**: Only allows traffic from the ALB (not directly from the internet) + SSH from your IP for debugging
+> - **RDS SG**: Only allows PostgreSQL connections from the EC2 instance (database is completely hidden from the internet)
+>
+> This layered approach means: Internet → ALB → EC2 → RDS. A hacker can't bypass the ALB to hit EC2 directly, and can't reach your database at all.
+
+### AWS Console UI Steps:
+
+1. Go to **VPC** → Left sidebar → **Security Groups**
+2. Click **Create security group**
+
+**Security Group 1: ALB (localloom-alb-sg)**
+
+3. Name: `localloom-alb-sg`
+4. Description: `ALB - allow HTTP/HTTPS from internet`
+5. VPC: Select `localloom-vpc`
+6. Inbound rules → Add rule:
+   - Type: **HTTP** | Source: **Anywhere-IPv4** (0.0.0.0/0)
+   - Type: **HTTPS** | Source: **Anywhere-IPv4** (0.0.0.0/0)
+7. Outbound rules: Keep default (All traffic, 0.0.0.0/0)
+8. Click **Create security group**
+
+**Security Group 2: EC2 (localloom-ec2-sg)**
+
+9. Click **Create security group** again
+10. Name: `localloom-ec2-sg`
+11. Description: `EC2 - allow traffic from ALB + SSH`
+12. VPC: Select `localloom-vpc`
+13. Inbound rules → Add rules:
+    - Type: **Custom TCP** | Port: `5000` | Source: Select **localloom-alb-sg** (type its name)
+    - Type: **SSH** | Port: `22` | Source: **My IP** (auto-fills your current IP)
+14. Outbound: Keep default
+15. Click **Create security group**
+
+**Security Group 3: RDS (localloom-rds-sg)**
+
+16. Click **Create security group** again
+17. Name: `localloom-rds-sg`
+18. Description: `RDS - allow PostgreSQL from EC2 only`
+19. VPC: Select `localloom-vpc`
+20. Inbound rules → Add rule:
+    - Type: **PostgreSQL** | Port: `5432` | Source: Select **localloom-ec2-sg**
+21. Outbound: Keep default
+22. Click **Create security group**
+
+### CLI Alternative:
+
+```bash
+# ALB Security Group
+aws ec2 create-security-group \
+  --group-name localloom-alb-sg \
+  --description "ALB - allow HTTP/HTTPS from internet" \
+  --vpc-id <vpc-id>
+
+aws ec2 authorize-security-group-ingress --group-id <alb-sg-id> --protocol tcp --port 80 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id <alb-sg-id> --protocol tcp --port 443 --cidr 0.0.0.0/0
+
+# EC2 Security Group
+aws ec2 create-security-group \
+  --group-name localloom-ec2-sg \
+  --description "EC2 - allow traffic from ALB + SSH" \
+  --vpc-id <vpc-id>
+
+aws ec2 authorize-security-group-ingress --group-id <ec2-sg-id> --protocol tcp --port 5000 --source-group <alb-sg-id>
+aws ec2 authorize-security-group-ingress --group-id <ec2-sg-id> --protocol tcp --port 22 --cidr <your-ip>/32
+
+# RDS Security Group
+aws ec2 create-security-group \
+  --group-name localloom-rds-sg \
+  --description "RDS - allow PostgreSQL from EC2 only" \
+  --vpc-id <vpc-id>
+
+aws ec2 authorize-security-group-ingress --group-id <rds-sg-id> --protocol tcp --port 5432 --source-group <ec2-sg-id>
+```
+
+---
+
+## Step 4: Create RDS PostgreSQL Instance
+
+> **What is RDS?** RDS (Relational Database Service) is a managed PostgreSQL database. Instead of installing PostgreSQL on a server yourself (and dealing with backups, updates, failover), AWS handles all of that for you.
+>
+> **Why RDS instead of PostgreSQL on EC2?** RDS gives you automatic daily backups (7-day retention), automatic security patches, encryption at rest, and one-click restore if something goes wrong. If your EC2 dies, your data is still safe in RDS.
+>
+> **Why db.t3.micro?** It's the smallest/cheapest instance (~$15/month) that's sufficient for an early-stage app with <1000 users. You can resize later without downtime.
+>
+> **Why private subnet + no public access?** Your database should NEVER be accessible from the internet. Only your EC2 (application server) should be able to connect to it.
+
+### AWS Console UI Steps:
+
+1. Go to AWS Console → Search **RDS** → Click "RDS" service
+2. Click **Create database**
+3. Choose method: **Standard create**
+4. Engine options:
+   - Engine type: **PostgreSQL**
+   - Engine version: **PostgreSQL 16.4**
+5. Templates: **Free tier** (if eligible) or **Production**
+6. Settings:
+   - DB instance identifier: `localloom-db`
+   - Master username: `z``
+   - Master password: Choose a strong password and SAVE IT
+7. Instance configuration:
+   - DB instance class: **db.t3.micro** (Burstable, 1 vCPU, 1 GB RAM)
+8. Storage:
+   - Storage type: **gp3**
+   - Allocated storage: `20` GB
+   - Enable storage autoscaling: Check it, max `50` GB
+9. Connectivity:
+   - VPC: Select **localloom-vpc**
+   - DB subnet group: Click "Create new" → name: `localloom-db-subnet` → select both private subnets
+   - Public access: **No**
+   - VPC security group: Choose existing → Select **localloom-rds-sg** (remove default)
+   - Availability Zone: No preference
+10. Database authentication: **Password authentication**
+11. Additional configuration:
+    - Initial database name: `localloom`
+    - Backup retention period: `7` days
+    - Enable encryption: **Yes**
+    - Enable deletion protection: **Yes**
+12. Click **Create database**
+13. Wait ~5-10 minutes for status to become "Available"
+14. Click on the DB instance → Note the **Endpoint** (e.g., `localloom-db.abc123.ap-southeast-2.rds.amazonaws.com`)
+
+### CLI Alternative:
+
+```bash
+# Create subnet group
+aws rds create-db-subnet-group \
+  --db-subnet-group-name localloom-db-subnet \
+  --db-subnet-group-description "Private subnets for RDS" \
+  --subnet-ids <private-subnet-1-id> <private-subnet-2-id>
+
+# Create RDS instance
+aws rds create-db-instance \
+  --db-instance-identifier localloom-db \
+  --db-instance-class db.t3.micro \
+  --engine postgres \
+  --engine-version 16.4 \
+  --master-username localloom_admin \
+  --master-user-password '<STRONG_PASSWORD>' \
+  --allocated-storage 20 \
+  --storage-type gp3 \
+  --vpc-security-group-ids <rds-sg-id> \
+  --db-subnet-group-name localloom-db-subnet \
+  --db-name localloom \
+  --backup-retention-period 7 \
+  --no-publicly-accessible \
+  --storage-encrypted \
+  --deletion-protection
+
+# Wait for it
+aws rds wait db-instance-available --db-instance-identifier localloom-db
+
+# Get endpoint
+aws rds describe-db-instances \
+  --db-instance-identifier localloom-db \
+  --query 'DBInstances[0].Endpoint.Address' --output text
+```
+
+---
+
+## Step 5: Create S3 Bucket for File Uploads
+
+> **What is S3?** S3 (Simple Storage Service) is AWS's file storage service. It's like a hard drive in the cloud that never runs out of space, automatically backs up your files, and costs fractions of a cent per GB.
+>
+> **Why use S3 for uploads?** Your EC2 instance has limited disk space (30GB). If the EC2 dies or you need to replace it, files stored locally on EC2 would be lost. S3 is separate from your server — files persist regardless of what happens to EC2. It also handles unlimited file sizes and concurrent uploads without slowing your server.
+>
+> **Why block public access?** User uploads (profile photos, work photos) should be served through your API (which checks authentication), not directly accessible to anyone with the URL.
+
+### AWS Console UI Steps:
+
+1. Go to AWS Console → Search **S3** → Click "S3" service
+2. Click **Create bucket**
+3. Bucket name: `localloom-uploads-prod`
+4. Region: **Asia Pacific (Sydney) ap-southeast-2**
+5. Object Ownership: **ACLs disabled**
+6. Block Public Access: **Check all boxes** (block all public access)
+7. Bucket Versioning: **Enable** (for data safety)
+8. Encryption: **SSE-S3** (default)
+9. Click **Create bucket**
+
+### CLI Alternative:
+
+```bash
+aws s3 mb s3://localloom-uploads-prod --region ap-southeast-2
+
+aws s3api put-public-access-block \
+  --bucket localloom-uploads-prod \
+  --public-access-block-configuration \
+  "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+> Note: For launch, you can keep using local `/uploads` on EC2. Migrate to S3 later.
+
+---
+
+## Step 6: Store Secrets in AWS Secrets Manager
+
+> **What is Secrets Manager?** It's AWS's secure vault for storing sensitive data like database passwords, API keys, and tokens. Instead of putting secrets in a `.env` file on your server (which could be leaked), you store them encrypted in AWS and your app fetches them at startup.
+>
+> **Why not just use a .env file on EC2?** Secrets Manager encrypts secrets at rest, provides audit logs of who accessed what, allows you to rotate secrets without redeploying, and means secrets never exist in your git repo or deployment pipeline. If your EC2 gets compromised, the attacker doesn't have permanent access to your secrets.
+>
+> **How does your app use it?** The EC2 user-data script fetches secrets at boot time and writes them to a local `.env` file that the Docker container reads.
+
+### AWS Console UI Steps:
+
+1. Go to AWS Console → Search **Secrets Manager** → Click it
+2. Click **Store a new secret**
+3. Secret type: **Other type of secret**
+4. Key/value pairs — Click "Plaintext" tab and paste:
+
+
+```json
+{
+  "NODE_ENV": "production",
+  "PORT": "5000",
+  "API_PREFIX": "/api",
+  "DB_HOST": "<YOUR-RDS-ENDPOINT>.ap-southeast-2.rds.amazonaws.com",
+  "DB_PORT": "5432",
+  "DB_NAME": "localloom",
+  "DB_USER": "localloom_admin",
+  "DB_PASSWORD": "<YOUR-RDS-PASSWORD>",
+  "JWT_ACCESS_SECRET": "<GENERATE-WITH: openssl rand -hex 32>",
+  "JWT_REFRESH_SECRET": "<GENERATE-WITH: openssl rand -hex 32>",
+  "JWT_ACCESS_EXPIRY": "15m",
+  "JWT_REFRESH_EXPIRY": "7d",
+  "CORS_ORIGIN": "https://admin.localloom.com.au,https://localloom.com.au",
+  "RATE_LIMIT_WINDOW_MS": "900000",
+  "RATE_LIMIT_MAX": "100",
+  "LOG_LEVEL": "info",
+  "MAX_FILE_SIZE": "5242880",
+  "UPLOAD_DIR": "uploads",
+  "SERVER_HOST": "",
+  "BACKEND_BASE_URL": "https://api.localloom.com.au",
+  "TWILIO_ACCOUNT_SID": "<YOUR-TWILIO-ACCOUNT-SID>",
+  "TWILIO_AUTH_TOKEN": "<YOUR-TWILIO-AUTH-TOKEN>",
+  "TWILIO_VERIFY_SERVICE_SID": "<YOUR-TWILIO-VERIFY-SERVICE-SID>",
+  "TWILIO_MESSAGING_SERVICE_SID": "<YOUR-TWILIO-MESSAGING-SERVICE-SID>",
+  "OTP_EXPIRY_MINUTES": "5",
+  "OTP_MAX_ATTEMPTS": "3",
+  "OTP_DEV_CODE": "123456",
+  "EMAIL_HOST": "smtp.gmail.com",
+  "EMAIL_PORT": "587",
+  "EMAIL_USER": "<YOUR-PRODUCTION-EMAIL>",
+  "EMAIL_PASS": "<YOUR-EMAIL-APP-PASSWORD>",
+  "EMAIL_FROM": "<YOUR-PRODUCTION-EMAIL>",
+  "ABN_LOOKUP_GUID": "<YOUR-ABN-LOOKUP-GUID>",
+  "AI_MODE": "production",
+  "ANTHROPIC_API_KEY": "<YOUR-ANTHROPIC-API-KEY>",
+  "ANTHROPIC_CLASSIFIER_MODEL": "claude-haiku-4-5",
+  "AI_CLASSIFIER_MAX_TOKENS": "256",
+  "AI_CLASSIFIER_TEMPERATURE": "0",
+  "AI_CLASSIFIER_TIMEOUT_MS": "15000",
+  "AI_CLASSIFIER_RATE_LIMIT_MAX": "20",
+  "AI_CLASSIFIER_RATE_LIMIT_WINDOW_MS": "60000",
+  "AI_CLASSIFIER_CATALOG_CACHE_TTL_MS": "300000",
+  "AI_CLASSIFIER_DEBUG_LOG_PROMPT": "false"
+}
+```
+
+5. Click **Next**
+6. Secret name: `localloom/production`
+7. Description: `LocalLoom production environment variables`
+8. Click **Next** → **Next** → **Store**
+
+> To generate random strings for JWT secrets, run: `openssl rand -hex 32`
+
+### CLI Alternative:
+
+```bash
+aws secretsmanager create-secret \
+  --name localloom/production \
+  --description "LocalLoom production environment variables" \
+  --secret-string '{ ... paste the JSON above ... }'
+```
+
+---
+
+## Step 7: Create ECR Repository & Push Docker Image
+
+> **What is ECR?** ECR (Elastic Container Registry) is AWS's private Docker image storage. It's like Docker Hub but private to your AWS account. You push your built Docker images here, and your EC2 pulls them when deploying.
+>
+> **Why use ECR?** Your LocalLoom backend has a multi-stage Dockerfile that builds a production image. ECR stores these images securely, scans them for vulnerabilities, and provides fast pulls within the same AWS region (no internet download needed). It also handles versioning so you can roll back to a previous image if a deploy goes wrong.
+>
+> **Why not just build on EC2?** Building Docker images requires lots of RAM and CPU. Your small EC2 would struggle. Instead, you build on your powerful local machine (or CI/CD), push the ready-made image, and EC2 just pulls and runs it.
+
+### AWS Console UI Steps:
+
+1. Go to AWS Console → Search **ECR** (Elastic Container Registry) → Click it
+2. Click **Create repository**
+3. Visibility: **Private**
+4. Repository name: `localloom-backend`
+5. Image tag mutability: **Mutable**
+6. Scan on push: **Enabled**
+7. Click **Create repository**
+8. Click on the repository name → Click **View push commands** (top right) — this shows exact commands for your account
+
+### Push Docker Image (from your local machine):
+
+```bash
+# Get your AWS account ID
+aws sts get-caller-identity --query Account --output text
+# Example output: 123456789012
+
+# Login to ECR
+aws ecr get-login-password --region ap-southeast-2 | \
+  docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com
+
+# Build production image (run from localloom-backend/ folder)
+docker build --target production -t localloom-backend:latest .
+
+# Tag for ECR
+docker tag localloom-backend:latest \
+  <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
+
+# Push to ECR
+docker push <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
+```
+
+---
+
+## Step 8: Create IAM Role for EC2
+
+> **What is an IAM Role for EC2?** When your EC2 instance needs to talk to other AWS services (pull images from ECR, read secrets, write to S3), it needs permission. An IAM Role is like giving your server a badge that says "I'm allowed to do these specific things." Without it, your EC2 can't access any other AWS service.
+>
+> **Why not just put access keys on EC2?** Putting access keys directly on a server is a security risk — if the server is compromised, those keys can be used from anywhere. IAM Roles are tied to the instance itself and can't be stolen and used elsewhere. AWS automatically rotates the temporary credentials behind the scenes.
+
+The EC2 instance needs permissions to pull Docker images from ECR and read secrets.
+
+### AWS Console UI Steps:
+
+1. Go to **IAM** → Left sidebar → **Roles**
+2. Click **Create role**
+3. Trusted entity type: **AWS service**
+4. Use case: **EC2**
+5. Click **Next**
+6. Search and attach these policies:
+   - `AmazonEC2ContainerRegistryReadOnly`
+   - `SecretsManagerReadWrite`
+   - `AmazonS3FullAccess`
+   - `CloudWatchAgentServerPolicy`
+7. Click **Next**
+8. Role name: `localloom-ec2-role`
+9. Click **Create role**
+
+### CLI Alternative:
+
+```bash
+aws iam create-role \
+  --role-name localloom-ec2-role \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]
+  }'
+
+aws iam attach-role-policy --role-name localloom-ec2-role --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+aws iam attach-role-policy --role-name localloom-ec2-role --policy-arn arn:aws:iam::aws:policy/SecretsManagerReadWrite
+aws iam attach-role-policy --role-name localloom-ec2-role --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+aws iam attach-role-policy --role-name localloom-ec2-role --policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+aws iam create-instance-profile --instance-profile-name localloom-ec2-role
+aws iam add-role-to-instance-profile --instance-profile-name localloom-ec2-role --role-name localloom-ec2-role
+```
+
+---
+
+## Step 9: Launch EC2 Instance
+
+> **What is EC2?** EC2 (Elastic Compute Cloud) is a virtual server in the cloud. It's the machine that actually runs your LocalLoom Node.js backend. Think of it as renting a computer in AWS's data center that's always on, always connected to the internet.
+>
+> **Why t3.small?** It has 2 vCPUs and 2GB RAM — enough to run your Docker container, handle Socket.IO connections for real-time chat, serve API requests, and process AI classifications concurrently. It can comfortably handle 500-1000 concurrent users.
+>
+> **What is User Data?** It's a startup script that runs automatically when the EC2 first boots. It installs Docker, pulls your image from ECR, fetches secrets, and starts your app — so the server is fully operational without you needing to SSH in.
+>
+> **Why Amazon Linux 2023?** It's lightweight, optimized for AWS, gets free security updates, and has the AWS CLI pre-installed.
+
+### AWS Console UI Steps:
+
+1. Go to AWS Console → Search **EC2** → Click "EC2" service
+2. Click **Launch instances**
+3. Name: `localloom-api`
+4. Application and OS Images:
+   - Select **Amazon Linux 2023 AMI** (Free tier eligible, 64-bit x86)
+5. Instance type: **t3.small** (2 vCPU, 2 GB RAM)
+6. Key pair:
+   - Click **Create new key pair**
+   - Name: `localloom-key`
+   - Type: **RSA**
+   - Format: **.pem** (for Linux/Mac) or **.ppk** (for Windows/PuTTY)
+   - Click **Create key pair** — file downloads automatically
+   - **Keep this file safe!** Move it somewhere secure and run: `chmod 400 localloom-key.pem`
+7. Network settings → Click **Edit**:
+   - VPC: Select **localloom-vpc**
+   - Subnet: Select **localloom-public-1**
+   - Auto-assign public IP: **Enable**
+   - Security group: Select existing → **localloom-ec2-sg**
+8. Configure storage:
+   - Root volume: `30` GiB, **gp3**
+9. Advanced details:
+   - IAM instance profile: Select **localloom-ec2-role**
+   - User data: Paste the script below
+10. Click **Launch instance**
+
+### User Data Script (paste in Advanced details → User data):
+
+```bash
+#!/bin/bash
+yum update -y
+yum install -y docker jq
+systemctl enable docker
+systemctl start docker
+usermod -aG docker ec2-user
 
 # Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# Install CodeDeploy Agent (needed for auto-deploy)
-sudo yum install -y ruby wget
-wget https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/latest/install
-chmod +x ./install
-sudo ./install auto
-sudo systemctl start codedeploy-agent
-sudo systemctl enable codedeploy-agent
-
-# Log out and log back in (so Docker group takes effect)
-exit
-```
-
-SSH back in:
-```bash
-ssh -i "your-key.pem" ec2-user@YOUR_EC2_PUBLIC_IP
-```
-
-### Step 4: Create an IAM Role for EC2
-
-Your EC2 needs permission to pull Docker images from ECR.
-
-1. Go to **AWS Console** → **IAM** → **Roles** → **Create Role**
-2. **Trusted entity**: AWS Service → EC2
-3. **Permissions** — Search and add these policies:
-   - `AmazonEC2ContainerRegistryReadOnly`
-   - `AmazonSSMManagedInstanceCore`
-   - `AWSCodeDeployRole` (if not available, use the custom policy below)
-4. **Role name**: `localloom-ec2-role`
-5. Click **Create Role**
-
-Now attach this role to your EC2:
-1. Go to **EC2** → Select your instance → **Actions** → **Security** → **Modify IAM Role**
-2. Select `localloom-ec2-role` → **Update IAM Role**
-
-### Step 5: Create the `.env` File on Your Server
-
-SSH into your EC2 and create the environment file:
-
-```bash
-ssh -i "your-key.pem" ec2-user@YOUR_EC2_PUBLIC_IP
-
-mkdir -p /home/ec2-user/app
-cat > /home/ec2-user/app/.env << 'EOF'
-NODE_ENV=production
-PORT=5000
-API_PREFIX=/api
-
-# Paste your MongoDB Atlas connection string here
-MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/localloom?retryWrites=true&w=majority
-
-# Generate strong secrets (run: openssl rand -hex 32)
-JWT_ACCESS_SECRET=PASTE_A_RANDOM_64_CHAR_STRING_HERE
-JWT_REFRESH_SECRET=PASTE_ANOTHER_RANDOM_64_CHAR_STRING_HERE
-JWT_ACCESS_EXPIRY=15m
-JWT_REFRESH_EXPIRY=7d
-
-CORS_ORIGIN=https://yourdomain.com
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-LOG_LEVEL=info
-MAX_FILE_SIZE=5242880
-UPLOAD_DIR=uploads
-EOF
-```
-
-Generate your JWT secrets:
-```bash
-# Run this twice, use each output for the two JWT secrets above
-openssl rand -hex 32
-```
-
-### Step 6: Set Up CodeBuild (Builds Your Docker Image)
-
-1. Go to **AWS Console** → **CodeBuild** → **Create build project**
-2. Configure:
-   - **Project name**: `localloom-backend-build`
-   - **Source**: GitHub → Connect your GitHub account → Select your repo
-   - **Environment**:
-     - Managed image
-     - Operating system: Amazon Linux
-     - Runtime: Standard
-     - Image: `aws/codebuild/amazonlinux2-x86_64-standard:5.0`
-     - **Privileged**: ✅ CHECK THIS (needed for Docker builds)
-   - **Service role**: Create a new service role (auto-created)
-   - **Buildspec**: Use a buildspec file (we'll create this next)
-3. Click **Create build project**
-
-After creation, add ECR permissions to the CodeBuild role:
-1. Go to **IAM** → **Roles** → Find the role named `codebuild-localloom-backend-build-service-role`
-2. **Attach policies** → Add `AmazonEC2ContainerRegistryPowerUser`
-
-### Step 7: Set Up CodeDeploy
-
-**Create a CodeDeploy Application:**
-
-1. Go to **AWS Console** → **CodeDeploy** → **Applications** → **Create application**
-   - **Name**: `localloom-backend`
-   - **Compute platform**: EC2/On-premises
-   - Click **Create application**
-
-**Create a Deployment Group:**
-
-1. Inside the application → **Create deployment group**
-   - **Name**: `localloom-production`
-   - **Service role**: Create a new IAM role with `AWSCodeDeployRole` policy, or use an existing one
-   - **Deployment type**: In-place
-   - **Environment configuration**: Amazon EC2 instances
-     - Tag group: Key = `Name`, Value = `localloom-backend`
-   - **Deployment settings**: `CodeDeployDefault.AllAtOnce`
-   - **Load balancer**: Uncheck "Enable load balancing" (for single server)
-   - Click **Create deployment group**
-
-### Step 8: Set Up CodePipeline (Auto-Build on Push)
-
-1. Go to **AWS Console** → **CodePipeline** → **Create pipeline**
-2. Configure:
-   - **Pipeline name**: `localloom-backend-pipeline`
-   - **Service role**: New service role (auto-created)
-   - Click **Next**
-
-3. **Source stage**:
-   - Source provider: **GitHub (Version 2)**
-   - Click **Connect to GitHub** → Authorize AWS → Select your repo
-   - Branch: `main`
-   - Detection option: **Start pipeline on push** ← This is the magic!
-   - Click **Next**
-
-4. **Build stage**:
-   - Build provider: **AWS CodeBuild**
-   - Project name: `localloom-backend-build` (the one you created in Step 6)
-   - Click **Next**
-
-5. **Deploy stage**:
-   - Deploy provider: **AWS CodeDeploy**
-   - Application name: `localloom-backend`
-   - Deployment group: `localloom-production`
-   - Click **Next**
-
-6. Review and **Create pipeline**
-
-That's it for the AWS Console setup! Now you need to add some files to your codebase.
-
----
-
-## Solution 2: Without Docker
-
-This runs Node.js directly on EC2 using PM2 (a process manager). No Docker involved.
-
-### Step 1: Launch an EC2 Instance
-
-Same as Solution 1, Step 2. Follow those exact instructions.
-
-### Step 2: Connect and Install Node.js + PM2
-
-```bash
-ssh -i "your-key.pem" ec2-user@YOUR_EC2_PUBLIC_IP
-```
-
-```bash
-# Update system
-sudo yum update -y
-
-# Install Node.js 20
-curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-sudo yum install -y nodejs
-
-# Verify
-node --version   # Should show v20.x.x
-npm --version
-
-# Install PM2 globally (keeps your app running and restarts on crash)
-sudo npm install -g pm2
-
-# Install CodeDeploy Agent
-sudo yum install -y ruby wget
-wget https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/latest/install
-chmod +x ./install
-sudo ./install auto
-sudo systemctl start codedeploy-agent
-sudo systemctl enable codedeploy-agent
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+  -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
 
 # Create app directory
-mkdir -p /home/ec2-user/app
-```
+mkdir -p /opt/localloom
+cd /opt/localloom
 
-### Step 3: Create IAM Role for EC2
+# Login to ECR
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+REGION=ap-southeast-2
+aws ecr get-login-password --region $REGION | \
+  docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
 
-1. Go to **AWS Console** → **IAM** → **Roles** → **Create Role**
-2. **Trusted entity**: AWS Service → EC2
-3. **Permissions**: Add these policies:
-   - `AmazonSSMManagedInstanceCore`
-   - `AmazonS3ReadOnlyAccess` (CodeDeploy uses S3 to transfer files)
-4. **Role name**: `localloom-ec2-role`
-5. Attach to your EC2 instance (same as Solution 1, Step 4)
+# Pull secrets and create .env file
+SECRET=$(aws secretsmanager get-secret-value --secret-id localloom/production --region $REGION --query SecretString --output text)
+echo "NODE_ENV=production" > .env
+echo "PORT=5000" >> .env
+echo "$SECRET" | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> .env
 
-### Step 4: Create the `.env` File on Your Server
+# Pull and run container
+docker pull ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/localloom-backend:latest
 
-Same as Solution 1, Step 5. Follow those exact instructions.
-
-### Step 5: Set Up CodeBuild
-
-1. Go to **AWS Console** → **CodeBuild** → **Create build project**
-2. Configure:
-   - **Project name**: `localloom-backend-build`
-   - **Source**: GitHub → Connect → Select your repo
-   - **Environment**:
-     - Managed image
-     - Operating system: Amazon Linux
-     - Runtime: Standard
-     - Image: `aws/codebuild/amazonlinux2-x86_64-standard:5.0`
-     - **Privileged**: ❌ NOT needed (no Docker)
-   - **Buildspec**: Use a buildspec file
-   - **Artifacts**:
-     - Type: **Amazon S3**
-     - Bucket: Create a new S3 bucket named `localloom-build-artifacts` (or any unique name)
-     - Name: `localloom-backend-build.zip`
-     - Packaging: Zip
-3. Click **Create build project**
-
-### Step 6: Set Up CodeDeploy
-
-Same as Solution 1, Step 7. Follow those exact instructions.
-
-### Step 7: Set Up CodePipeline
-
-Same as Solution 1, Step 8, but with one difference:
-
-In the **Build stage**, make sure the **Output artifact** is configured to pass to the Deploy stage.
-
-Everything else is identical.
-
----
-
-## Files You Need to Add to Your Codebase
-
-Yes! You need to add some config files to your project. These tell AWS HOW to build and deploy your code.
-
----
-
-### For BOTH Solutions: `appspec.yml`
-
-This file tells CodeDeploy what to do when deploying. Add it to the **root** of your project.
-
----
-
-### For Solution 1 (Docker): Files to Add
-
-You need **3 files** in your project root:
-
-#### File 1: `buildspec.yml`
-
-```yaml
-version: 0.2
-
-env:
-  variables:
-    ECR_REPO: "YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/localloom-backend"
-    # Replace YOUR_AWS_ACCOUNT_ID with your actual AWS account ID
-    # Find it: AWS Console → top-right corner → Account ID
-
-phases:
-  pre_build:
-    commands:
-      - echo Logging in to Amazon ECR...
-      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REPO
-      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
-      - IMAGE_TAG=${COMMIT_HASH:-latest}
-  build:
-    commands:
-      - echo Building Docker image...
-      - docker build -t $ECR_REPO:$IMAGE_TAG .
-      - docker tag $ECR_REPO:$IMAGE_TAG $ECR_REPO:latest
-  post_build:
-    commands:
-      - echo Pushing Docker image...
-      - docker push $ECR_REPO:$IMAGE_TAG
-      - docker push $ECR_REPO:latest
-      - echo Writing deployment artifacts...
-      - printf '{"ImageURI":"%s"}' $ECR_REPO:$IMAGE_TAG > imageDetail.json
-
-artifacts:
-  files:
-    - imageDetail.json
-    - appspec.yml
-    - scripts/*
-```
-
-#### File 2: `appspec.yml`
-
-```yaml
-version: 0.0
-os: linux
-
-files:
-  - source: /
-    destination: /home/ec2-user/app
-
-hooks:
-  BeforeInstall:
-    - location: scripts/before_install.sh
-      timeout: 300
-      runas: ec2-user
-
-  AfterInstall:
-    - location: scripts/after_install.sh
-      timeout: 300
-      runas: ec2-user
-
-  ApplicationStart:
-    - location: scripts/start_app.sh
-      timeout: 300
-      runas: ec2-user
-
-  ValidateService:
-    - location: scripts/validate_service.sh
-      timeout: 120
-      runas: ec2-user
-```
-
-#### File 3: Deployment Scripts
-
-Create a `scripts/` folder in your project root with these 4 files:
-
-**`scripts/before_install.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== Before Install ==="
-
-# Log in to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
-
-echo "ECR login successful"
-```
-
-**`scripts/after_install.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== After Install ==="
-
-ECR_REPO="YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/localloom-backend"
-
-# Pull the latest image
-docker pull $ECR_REPO:latest
-
-echo "Docker image pulled successfully"
-```
-
-**`scripts/start_app.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== Starting Application ==="
-
-ECR_REPO="YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/localloom-backend"
-APP_DIR="/home/ec2-user/app"
-
-# Stop old container (if running) — old code keeps serving until new one is ready
-docker stop localloom-api 2>/dev/null || true
-docker rm localloom-api 2>/dev/null || true
-
-# Start new container
 docker run -d \
   --name localloom-api \
   --restart unless-stopped \
   -p 5000:5000 \
-  --env-file $APP_DIR/.env \
-  -v localloom-uploads:/app/uploads \
-  -v localloom-logs:/app/logs \
-  $ECR_REPO:latest
-
-echo "Application started successfully"
-
-# Clean up old images to save disk space
-docker image prune -af --filter "until=24h" 2>/dev/null || true
+  --env-file .env \
+  -v /opt/localloom/uploads:/app/uploads \
+  -v /opt/localloom/logs:/app/logs \
+  ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/localloom-backend:latest
 ```
 
-**`scripts/validate_service.sh`**
+### After Launch — Verify EC2 is Running:
+
 ```bash
-#!/bin/bash
-set -e
+# SSH into your instance
+ssh -i localloom-key.pem ec2-user@<ec2-public-ip>
 
-echo "=== Validating Service ==="
+# Check if Docker container is running
+docker ps
 
-# Wait for the app to start
-sleep 10
-
-# Check if the health endpoint responds
-for i in {1..6}; do
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo "000")
-  
-  if [ "$HTTP_CODE" = "200" ]; then
-    echo "Health check passed! (HTTP $HTTP_CODE)"
-    exit 0
-  fi
-  
-  echo "Attempt $i: HTTP $HTTP_CODE — waiting 5 seconds..."
-  sleep 5
-done
-
-echo "Health check FAILED after 30 seconds"
-exit 1
-```
-
-> **IMPORTANT**: In all scripts above, replace `YOUR_AWS_ACCOUNT_ID` with your actual AWS Account ID.
-> Find it: AWS Console → click your name (top-right) → copy the Account ID (12-digit number).
-
----
-
-### For Solution 2 (Without Docker): Files to Add
-
-You need **3 files** in your project root:
-
-#### File 1: `buildspec.yml`
-
-```yaml
-version: 0.2
-
-phases:
-  install:
-    runtime-versions:
-      nodejs: 20
-    commands:
-      - echo Installing dependencies...
-      - npm ci
-  build:
-    commands:
-      - echo Building TypeScript...
-      - npm run build
-  post_build:
-    commands:
-      - echo Build completed
-
-artifacts:
-  files:
-    - dist/**/*
-    - node_modules/**/*
-    - package.json
-    - appspec.yml
-    - scripts/*
-    - ecosystem.config.js
-  discard-paths: no
-```
-
-#### File 2: `appspec.yml`
-
-```yaml
-version: 0.0
-os: linux
-
-files:
-  - source: /
-    destination: /home/ec2-user/app
-
-hooks:
-  BeforeInstall:
-    - location: scripts/before_install.sh
-      timeout: 300
-      runas: ec2-user
-
-  AfterInstall:
-    - location: scripts/after_install.sh
-      timeout: 300
-      runas: ec2-user
-
-  ApplicationStart:
-    - location: scripts/start_app.sh
-      timeout: 300
-      runas: ec2-user
-
-  ValidateService:
-    - location: scripts/validate_service.sh
-      timeout: 120
-      runas: ec2-user
-```
-
-#### File 3: PM2 Config — `ecosystem.config.js`
-
-```javascript
-module.exports = {
-  apps: [
-    {
-      name: 'localloom-api',
-      script: 'dist/server.js',
-      cwd: '/home/ec2-user/app',
-      instances: 1,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '512M',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 5000,
-      },
-      // Graceful shutdown — finish serving current requests before stopping
-      kill_timeout: 10000,
-      listen_timeout: 10000,
-      // Logs
-      error_file: '/home/ec2-user/app/logs/pm2-error.log',
-      out_file: '/home/ec2-user/app/logs/pm2-out.log',
-      merge_logs: true,
-    },
-  ],
-};
-```
-
-#### File 4: Deployment Scripts
-
-Create a `scripts/` folder with these 4 files:
-
-**`scripts/before_install.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== Before Install ==="
-
-# Create directories if they don't exist
-mkdir -p /home/ec2-user/app/logs
-mkdir -p /home/ec2-user/app/uploads
-
-echo "Directories ready"
-```
-
-**`scripts/after_install.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== After Install ==="
-
-cd /home/ec2-user/app
-
-# Install only production dependencies (devDependencies already excluded in build)
-npm ci --only=production 2>/dev/null || echo "Using pre-built node_modules"
-
-echo "Dependencies ready"
-```
-
-**`scripts/start_app.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== Starting Application ==="
-
-cd /home/ec2-user/app
-
-# Copy .env if it exists in the parent location
-if [ -f /home/ec2-user/app/.env ]; then
-  echo ".env file found"
-fi
-
-# Graceful reload — PM2 keeps old process running until new one is ready
-# This is the zero-downtime magic!
-pm2 describe localloom-api > /dev/null 2>&1
-if [ $? -eq 0 ]; then
-  echo "Reloading existing app (zero downtime)..."
-  pm2 reload ecosystem.config.js
-else
-  echo "Starting app for the first time..."
-  pm2 start ecosystem.config.js
-fi
-
-# Save PM2 process list (survives server reboot)
-pm2 save
-
-# Set PM2 to start on boot
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user 2>/dev/null || true
-
-echo "Application started successfully"
-```
-
-**`scripts/validate_service.sh`**
-```bash
-#!/bin/bash
-set -e
-
-echo "=== Validating Service ==="
-
-# Wait for the app to start
-sleep 10
-
-# Check if the health endpoint responds
-for i in {1..6}; do
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo "000")
-  
-  if [ "$HTTP_CODE" = "200" ]; then
-    echo "Health check passed! (HTTP $HTTP_CODE)"
-    exit 0
-  fi
-  
-  echo "Attempt $i: HTTP $HTTP_CODE — waiting 5 seconds..."
-  sleep 5
-done
-
-echo "Health check FAILED after 30 seconds"
-exit 1
+# Check container logs
+docker logs localloom-api
 ```
 
 ---
 
-## Summary: What Files Go Where
+## Step 10: Set Up Application Load Balancer (ALB)
 
-### Solution 1 (Docker) — Add these to your project root:
+> **What is an ALB?** ALB (Application Load Balancer) sits between the internet and your EC2. It receives all incoming requests, terminates SSL (handles HTTPS encryption), and forwards traffic to your app on port 5000.
+>
+> **Why do we need it?** Three main reasons:
+> 1. **SSL/HTTPS** — ALB handles the SSL certificate so your app doesn't need to. Users connect via `https://api.localloom.com.au` securely.
+> 2. **WebSocket support** — ALB natively supports WebSocket connections (needed for your Socket.IO chat).
+> 3. **Health checks** — ALB continuously pings your `/health` endpoint. If your app crashes, ALB returns a 503 instead of a connection timeout.
+>
+> **What is a Target Group?** It tells the ALB where to send traffic. In your case: "send HTTP requests to EC2 instance on port 5000." It also defines health check rules.
+>
+> **Why sticky sessions?** Socket.IO uses polling as a fallback transport. Sticky sessions ensure repeated requests from the same client go to the same backend (important for WebSocket handshake).
 
-```
-localloom-backend/
-├── buildspec.yml          ← NEW (tells CodeBuild how to build Docker image)
-├── appspec.yml            ← NEW (tells CodeDeploy how to deploy)
-├── scripts/               ← NEW FOLDER
-│   ├── before_install.sh  ← NEW (ECR login)
-│   ├── after_install.sh   ← NEW (pull Docker image)
-│   ├── start_app.sh       ← NEW (stop old container, start new one)
-│   └── validate_service.sh← NEW (health check)
-├── Dockerfile             ← ALREADY EXISTS (no changes needed)
-├── .dockerignore          ← ALREADY EXISTS (no changes needed)
-└── ... (rest of your code)
-```
+### AWS Console UI Steps:
 
-### Solution 2 (Without Docker) — Add these to your project root:
+1. Go to **EC2** → Left sidebar → **Load Balancers**
+2. Click **Create Load Balancer**
+3. Select **Application Load Balancer** → Click **Create**
+4. Basic configuration:
+   - Name: `localloom-alb`
+   - Scheme: **Internet-facing**
+   - IP address type: **IPv4**
+5. Network mapping:
+   - VPC: Select **localloom-vpc**
+   - Mappings: Check both AZs and select the **public subnets**:
+     - ap-southeast-2a → localloom-public-1
+     - ap-southeast-2b → localloom-public-2
+6. Security groups: Select **localloom-alb-sg** (remove default)
+7. Listeners and routing:
+   - Keep HTTP:80 listener for now (we'll add HTTPS after certificate)
+   - Click **Create target group** (opens new tab):
 
-```
-localloom-backend/
-├── buildspec.yml          ← NEW (tells CodeBuild how to build TypeScript)
-├── appspec.yml            ← NEW (tells CodeDeploy how to deploy)
-├── ecosystem.config.js    ← NEW (PM2 process manager config)
-├── scripts/               ← NEW FOLDER
-│   ├── before_install.sh  ← NEW (create directories)
-│   ├── after_install.sh   ← NEW (install dependencies)
-│   ├── start_app.sh       ← NEW (PM2 reload with zero downtime)
-│   └── validate_service.sh← NEW (health check)
-└── ... (rest of your code)
-```
+### Create Target Group (in the new tab):
 
----
+8. Target type: **Instances**
+9. Target group name: `localloom-tg`
+10. Protocol: HTTP, Port: `5000`
+11. VPC: **localloom-vpc**
+12. Health check path: `/health`
+13. Advanced health check settings:
+    - Healthy threshold: `2`
+    - Unhealthy threshold: `3`
+    - Timeout: `10` seconds
+    - Interval: `30` seconds
+    - Success codes: `200`
+14. Click **Next**
+15. Register targets: Select your EC2 instance → Set port to `5000` → Click **Include as pending below**
+16. Click **Create target group**
 
-## How Zero Downtime Works
+### Back in ALB creation tab:
 
-### With Docker:
-1. New Docker image is built and pushed to ECR
-2. EC2 pulls the new image
-3. `start_app.sh` stops the old container and starts a new one
-4. `validate_service.sh` checks the health endpoint
-5. If health check fails, CodeDeploy rolls back to the old version automatically
+17. Refresh target groups and select **localloom-tg**
+18. Click **Create load balancer**
+19. Note the ALB DNS name (e.g., `localloom-alb-123456.ap-southeast-2.elb.amazonaws.com`)
 
-### Without Docker (PM2):
-1. New code is built (TypeScript → JavaScript)
-2. Files are copied to EC2
-3. `pm2 reload` starts a new process with the new code
-4. PM2 waits for the new process to be ready
-5. PM2 then gracefully shuts down the old process (finishes serving current requests)
-6. If health check fails, CodeDeploy rolls back automatically
-
----
-
-## How the Auto-Build Trigger Works
-
-When you set up CodePipeline with **"Start pipeline on push"**, AWS creates a webhook on your GitHub repository. This means:
-
-1. You write code locally
-2. You commit and push to `main`:
-   ```bash
-   git add .
-   git commit -m "new feature"
-   git push origin main
-   ```
-3. GitHub sends a notification to AWS (via the webhook)
-4. CodePipeline starts automatically
-5. CodeBuild builds your code
-6. CodeDeploy deploys it to your EC2
-
-You don't need to add any special file (like Cloudflare's `wrangler.toml` or Vercel's `vercel.json`) for the trigger itself. The webhook is created automatically by CodePipeline when you connect your GitHub account.
-
-The only files you add (`buildspec.yml`, `appspec.yml`, `scripts/`) tell AWS HOW to build and deploy — not WHEN. The "when" is handled by the pipeline + webhook.
-
----
-
-## Bonus: Set Up a Domain Name with HTTPS
-
-Once your app is running, you probably want `api.yourdomain.com` instead of an IP address.
-
-### Option A: Using Nginx as Reverse Proxy (on EC2)
+### CLI Alternative:
 
 ```bash
-# SSH into your EC2
-ssh -i "your-key.pem" ec2-user@YOUR_EC2_PUBLIC_IP
+aws elbv2 create-load-balancer \
+  --name localloom-alb \
+  --subnets <public-subnet-1-id> <public-subnet-2-id> \
+  --security-groups <alb-sg-id> \
+  --scheme internet-facing --type application
 
-# Install Nginx
-sudo yum install -y nginx
-sudo systemctl start nginx
-sudo systemctl enable nginx
+aws elbv2 create-target-group \
+  --name localloom-tg --protocol HTTP --port 5000 \
+  --vpc-id <vpc-id> --target-type instance \
+  --health-check-path /health --health-check-interval-seconds 30
 
-# Configure Nginx
-sudo tee /etc/nginx/conf.d/localloom.conf > /dev/null << 'EOF'
-server {
-    listen 80;
-    server_name api.yourdomain.com;
+aws elbv2 register-targets \
+  --target-group-arn <tg-arn> \
+  --targets Id=<ec2-instance-id>,Port=5000
+```
 
-    location / {
-        proxy_pass http://localhost:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+---
+
+## Step 11: Request SSL Certificate (ACM)
+
+> **What is ACM?** ACM (AWS Certificate Manager) provides free SSL/TLS certificates for your domain. SSL is what makes `https://` work — it encrypts all data between your users' devices and your server.
+>
+> **Why do we need SSL?** Without it, user data (passwords, OTP codes, chat messages, personal info) would be sent in plain text that anyone on the network could read. App stores also reject apps that communicate over unencrypted HTTP.
+>
+> **Why DNS validation?** It proves you own the domain by asking you to add a specific DNS record. Once validated, the certificate auto-renews forever (no manual renewal needed).
+>
+> **Cost?** Completely free when used with ALB.
+
+### AWS Console UI Steps:
+
+1. Go to AWS Console → Search **Certificate Manager** (ACM) → Click it
+2. Click **Request a certificate**
+3. Certificate type: **Request a public certificate** → **Next**
+4. Domain names: `api.localloom.com.au`
+   - (Optional) Add `*.localloom.com.au` for wildcard
+5. Validation method: **DNS validation**
+6. Click **Request**
+7. Click on the certificate → Status will be "Pending validation"
+8. Under "Domains" section, you'll see a CNAME record like:
+   - Name: `_abc123.api.localloom.com.au`
+   - Value: `_xyz789.acm-validations.aws`
+
+### Add the CNAME record in GoDaddy (for domain validation):
+
+9. Log in to https://dcc.godaddy.com (GoDaddy Domain Control Center)
+10. Click on your domain (e.g., `localloom.com.au`)
+11. Click **DNS** tab (or "Manage DNS")
+12. Click **Add New Record**
+13. Fill in:
+    - Type: **CNAME**
+    - Name: Copy the "Name" from ACM but **remove your domain part**
+      - Example: ACM shows `_abc123.api.localloom.com.au` → you enter `_abc123.api`
+      - (GoDaddy automatically appends `.localloom.com.au`)
+    - Value: Copy the full "Value" from ACM (e.g., `_xyz789.acm-validations.aws.`)
+    - TTL: **Default** or **600**
+14. Click **Save**
+15. Go back to AWS ACM → Wait 5-30 minutes → Status changes to **"Issued"**
+
+### CLI Alternative:
+
+```bash
+aws acm request-certificate \
+  --domain-name api.localloom.com.au \
+  --validation-method DNS \
+  --region ap-southeast-2
+```
+
+---
+
+## Step 12: Add HTTPS Listener to ALB
+
+> **What is a Listener?** A listener is a rule on the ALB that says "when traffic arrives on port X with protocol Y, do Z." You need two:
+> 1. **HTTPS on port 443** — Accepts encrypted traffic and forwards to your app
+> 2. **HTTP on port 80** — Automatically redirects to HTTPS (so users who type `http://` still get encrypted)
+>
+> **Why redirect HTTP to HTTPS?** If someone bookmarks or links to `http://api.localloom.com.au`, they'd get an error without this redirect. The redirect ensures all traffic ends up encrypted regardless of how users arrive.
+
+### AWS Console UI Steps:
+
+1. Go to **EC2** → **Load Balancers** → Click **localloom-alb**
+2. Go to **Listeners** tab
+3. Click **Add listener**:
+   - Protocol: **HTTPS**
+   - Port: `443`
+   - Default action: Forward to **localloom-tg**
+   - Default SSL/TLS certificate: Select **api.localloom.com.au** (from ACM)
+   - Security policy: `ELBSecurityPolicy-TLS13-1-2-2021-06`
+4. Click **Add**
+5. Now edit the HTTP:80 listener:
+   - Select the HTTP:80 listener → Click **Edit**
+   - Change default action to: **Redirect to HTTPS, port 443, status 301**
+   - Click **Save changes**
+
+### CLI Alternative:
+
+```bash
+# HTTPS listener
+aws elbv2 create-listener \
+  --load-balancer-arn <alb-arn> \
+  --protocol HTTPS --port 443 \
+  --certificates CertificateArn=<cert-arn> \
+  --default-actions Type=forward,TargetGroupArn=<tg-arn>
+
+# HTTP redirect listener
+aws elbv2 create-listener \
+  --load-balancer-arn <alb-arn> \
+  --protocol HTTP --port 80 \
+  --default-actions Type=redirect,RedirectConfig='{Protocol=HTTPS,Port=443,StatusCode=HTTP_301}'
+```
+
+---
+
+## Step 13: Configure DNS (GoDaddy)
+
+> **Why GoDaddy instead of Route 53?** Since your domain is already purchased and managed in GoDaddy, you can point it directly to your ALB from there. This skips Route 53 entirely and saves you $0.50/month. The result is the same — `api.localloom.com.au` points to your load balancer.
+>
+> **What is a CNAME record?** It's a DNS record that says "this subdomain points to that other address." You're telling GoDaddy: "when someone asks for `api.localloom.com.au`, send them to my ALB address."
+
+### GoDaddy UI Steps:
+
+1. Log in to https://dcc.godaddy.com
+2. Click on your domain (e.g., `localloom.com.au`)
+3. Click **DNS** tab (or "Manage DNS")
+4. Click **Add New Record**
+5. Fill in:
+   - Type: **CNAME**
+   - Name: `api`
+   - Value: Your ALB DNS name (e.g., `localloom-alb-123456.ap-southeast-4.elb.amazonaws.com`)
+   - TTL: **600**
+6. Click **Save**
+7. Wait 5-10 minutes for DNS to propagate
+8. Test: `curl https://api.localloom.com.au/health`
+
+> Note: You do NOT need AWS Route 53. GoDaddy handles DNS for free as part of your domain purchase. This saves $0.50/month.
+
+---
+
+## Step 14: Run Database Migrations
+
+SSH into your EC2 and run migrations:
+
+```bash
+ssh -i localloom-key.pem ec2-user@<ec2-public-ip>
+
+# Inside EC2:
+docker exec -it localloom-api npx sequelize-cli db:migrate
+docker exec -it localloom-api npx sequelize-cli db:seed:all
+```
+
+---
+
+## Step 15: Verify Deployment
+
+```bash
+# Health check (should return 200 with JSON)
+curl https://api.localloom.com.au/health
+
+# Expected:
+# {"success":true,"message":"LocalLoom backend is running","timestamp":"...","environment":"production"}
+```
+
+Also test WebSocket by connecting your frontend app.
+
+---
+
+## Step 16: Set Up CloudWatch Monitoring
+
+> **What is CloudWatch?** CloudWatch is AWS's monitoring and logging service. It collects logs from your application, tracks metrics (CPU usage, memory, request counts), and can alert you if something goes wrong (e.g., server CPU > 90% for 5 minutes).
+>
+> **Why do we need it?** In production, you can't just `docker logs` every time something breaks. CloudWatch stores your logs centrally so you can search them, set up alarms, and debug issues even if your EC2 instance dies and gets replaced.
+>
+> **What does it cost?** Basic monitoring is free. Log ingestion costs ~$0.50/GB. For a small app, expect $3-5/month.
+
+### AWS Console UI Steps:
+
+1. Go to **CloudWatch** → Left sidebar → **Log groups**
+2. Click **Create log group**
+3. Name: `/localloom/api`
+4. Retention: `14 days`
+5. Click **Create**
+
+Then SSH into EC2 and install the agent:
+
+```bash
+ssh -i localloom-key.pem ec2-user@<ec2-public-ip>
+
+sudo yum install -y amazon-cloudwatch-agent
+
+# Create config
+sudo tee /opt/aws/amazon-cloudwatch-agent/etc/config.json << 'EOF'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/opt/localloom/logs/*.log",
+            "log_group_name": "/localloom/api",
+            "log_stream_name": "{instance_id}",
+            "retention_in_days": 14
+          }
+        ]
+      }
     }
+  }
 }
 EOF
 
-# Test and reload Nginx
-sudo nginx -t
-sudo systemctl reload nginx
-
-# Install Certbot for free HTTPS (Let's Encrypt)
-sudo yum install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d api.yourdomain.com
-```
-
-### Option B: Using AWS Route 53 + Elastic IP
-
-1. Go to **EC2** → **Elastic IPs** → **Allocate** → **Associate** with your instance
-2. Go to **Route 53** → Create a hosted zone for your domain
-3. Add an **A record** pointing to your Elastic IP
-
----
-
-## Common Issues & Fixes
-
-### "CodeDeploy agent not running"
-```bash
-sudo systemctl status codedeploy-agent
-sudo systemctl restart codedeploy-agent
-```
-
-### "Docker permission denied"
-```bash
-sudo usermod -aG docker ec2-user
-# Then log out and log back in
-```
-
-### "Health check failing"
-```bash
-# Check if the app is running
-docker ps                    # Solution 1
-pm2 status                   # Solution 2
-
-# Check logs
-docker logs localloom-api    # Solution 1
-pm2 logs localloom-api       # Solution 2
-
-# Check if .env file exists
-cat /home/ec2-user/app/.env
-```
-
-### "ECR login expired"
-```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
-```
-
-### "Pipeline failed at Source stage"
-- Make sure your GitHub connection is authorized in CodePipeline
-- Go to **Settings** → **Connections** in the CodePipeline console and verify the status is "Available"
-
-### "Build failed"
-- Go to **CodeBuild** → Click on the failed build → Read the logs
-- Most common: missing permissions (ECR access for Docker solution)
-
-### "Deploy failed — scripts not executable"
-Make sure your scripts are executable before pushing:
-```bash
-chmod +x scripts/*.sh
-git add scripts/
-git commit -m "make deploy scripts executable"
-git push origin main
+# Start the agent
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
 ```
 
 ---
 
-## Cost Estimate (Monthly)
+## Deploying New Versions
 
-| Service | Free Tier | After Free Tier |
-|---------|-----------|-----------------|
-| EC2 t2.micro | Free (12 months) | ~$8.50/month |
-| EC2 t3.small | ~$15/month | ~$15/month |
-| ECR (Docker images) | 500MB free | ~$0.10/GB |
-| CodePipeline | 1 free pipeline | $1/pipeline |
-| CodeBuild | 100 min/month free | $0.005/min |
-| MongoDB Atlas M0 | Free forever | Free |
-| **Total (free tier)** | **~$0-1/month** | |
-| **Total (production)** | | **~$17-25/month** |
+When you push code changes:
+
+```bash
+# 1. Build and push new image (from your local machine)
+docker build --target production -t localloom-backend:latest .
+docker tag localloom-backend:latest <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
+aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com
+docker push <account-id>.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
+
+# 2. SSH in and restart
+ssh -i localloom-key.pem ec2-user@<ec2-public-ip>
+cd /opt/localloom
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.ap-southeast-2.amazonaws.com
+docker pull ${ACCOUNT_ID}.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
+docker stop localloom-api && docker rm localloom-api
+docker run -d \
+  --name localloom-api \
+  --restart unless-stopped \
+  -p 5000:5000 \
+  --env-file .env \
+  -v /opt/localloom/uploads:/app/uploads \
+  -v /opt/localloom/logs:/app/logs \
+  ${ACCOUNT_ID}.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
+
+# 3. Run migrations if needed
+docker exec -it localloom-api npx sequelize-cli db:migrate
+```
 
 ---
 
-## Quick Reference: The Full Flow
+## Production Hardening Checklist
 
-```
-1. You: git push origin main
-2. GitHub → webhook → AWS CodePipeline starts
-3. CodePipeline → triggers CodeBuild
-4. CodeBuild:
-   - Docker: builds image, pushes to ECR
-   - No Docker: runs npm ci + npm run build, zips artifacts
-5. CodePipeline → triggers CodeDeploy
-6. CodeDeploy runs your scripts on EC2:
-   - before_install.sh  → prep work
-   - after_install.sh   → pull image / install deps
-   - start_app.sh       → start new version (old keeps running until ready)
-   - validate_service.sh → health check
-7. ✅ Done! New code is live. Old code gracefully stopped.
-```
+Before going live, fix these in your codebase:
 
-That's it! You now have a fully automated CI/CD pipeline. Every push to `main` triggers a build and deploy with zero downtime. 🚀
+- [ ] **Enable rate limiting** — Uncomment `app.use(apiLimiter)` in `app.ts` and `authLimiter` in auth routes
+- [ ] **Remove hardcoded OTP** — In `auth.service.ts`, replace `const emailCode = '123456'` with `generateOTP(6)`
+- [ ] **Lock CORS origins** — Set `CORS_ORIGIN` to actual domains only
+- [ ] **Set proper JWT expiry** — Change access token from 365d to 15m
+- [ ] **Enable ABN lookup** — Uncomment real ABR API call in `abn-lookup.service.ts`
+- [ ] **Remove console.log statements** — Clean up debug logs
+- [ ] **Set NODE_ENV=production** — Ensures SSL on DB, disables dev OTP bypass
+
+---
+
+## Cost Breakdown (Monthly)
+
+| Service | Cost |
+|---------|------|
+| EC2 t3.small (on-demand) | ~$15.33 |
+| RDS db.t3.micro (20GB gp3) | ~$14.98 |
+| ALB (fixed + LCU) | ~$16.43 |
+| ECR (500MB images) | ~$0.05 |
+| CloudWatch (basic) | ~$3-5 |
+| Data transfer (10GB/mo) | ~$0.90 |
+| S3 (5GB, optional) | ~$0.12 |
+| DNS (GoDaddy) | $0 (included with domain) |
+| **Total** | **~$51–53** |
+
+> Tip: Purchase 1-year Reserved Instances for EC2 + RDS to save ~40% (~$30/month total).
+
+
+---
+
+## Bonus: Reserved Instances Explained & How to Purchase
+
+### What Are Reserved Instances?
+
+Think of it like renting vs. leasing a car:
+
+- **On-Demand (what you're using now)** = Renting a car daily. Pay by the hour, cancel anytime, but it's the most expensive option. Your EC2 t3.small costs ~$15.33/month on-demand.
+
+- **Reserved Instance (RI)** = Signing a 1-year or 3-year lease. You commit to using the server for that duration, and in return AWS gives you a massive discount (30-60% off). The server is the exact same — same specs, same performance — you just pay less because AWS knows you're sticking around.
+
+### Simple Analogy
+
+Imagine you go to a gym:
+- Monthly membership (no contract) = $50/month → This is **On-Demand**
+- 1-year contract = $35/month → This is **1-year Reserved (No Upfront)**
+- 1-year contract, pay full year now = $30/month → This is **1-year Reserved (All Upfront)**
+
+Same gym, same equipment, just cheaper because you committed.
+
+### How Much You Save (Your Setup)
+
+| Resource | On-Demand (monthly) | 1-Year RI No Upfront | 1-Year RI All Upfront | Savings |
+|----------|---------------------|----------------------|-----------------------|---------|
+| EC2 t3.small | ~$15.33 | ~$10.73 | ~$9.20 | 30-40% |
+| RDS db.t3.micro | ~$14.98 | ~$9.49 | ~$8.54 | 37-43% |
+| **Combined** | **~$30.31** | **~$20.22** | **~$17.74** | **33-42%** |
+
+So instead of paying ~$30/month for EC2+RDS, you'd pay ~$18-20/month. That's ~$120 saved per year.
+
+### Payment Options Explained
+
+| Option | How it works | Discount |
+|--------|-------------|----------|
+| **No Upfront** | Pay nothing now, reduced monthly price for 1 year. You're locked in but pay monthly. | ~30% off |
+| **Partial Upfront** | Pay ~50% now, rest as reduced monthly payments. | ~35% off |
+| **All Upfront** | Pay entire year upfront in one lump sum. Biggest discount. | ~40% off |
+
+### When Should You Buy Reserved Instances?
+
+**DO buy RIs when:**
+- Your app has been running on-demand for 1-2 months and you're sure you'll keep it running
+- You've confirmed t3.small is the right size (not too small, not too big)
+- You're committed to keeping this project live for at least a year
+
+**DON'T buy RIs when:**
+- You just launched and aren't sure the project will survive 12 months
+- You might need to change instance size soon (upgrade or downgrade)
+- You're still testing/experimenting
+
+### My Recommendation for LocalLoom
+
+1. **Month 1-2**: Run on-demand (full price). Verify everything works, confirm instance sizes are correct.
+2. **Month 3**: If the app is stable and you're keeping it, buy 1-year Reserved Instances with **No Upfront** payment. This way you save 30% without paying a big lump sum.
+
+---
+
+### How to Purchase EC2 Reserved Instance
+
+**AWS Console UI Steps:**
+
+1. Go to AWS Console → Search **EC2** → Click it
+2. In the left sidebar, scroll down to **Reserved Instances** (under "Instances")
+3. Click **Purchase Reserved Instances**
+4. Fill in the search:
+   - Platform: **Linux/UNIX**
+   - Instance Type: **t3.small**
+   - Tenancy: **Default**
+   - Offering Class: **Standard**
+   - Term: **1 year**
+   - Payment Option: **No Upfront** (recommended to start)
+5. Click **Search**
+6. You'll see available offerings with the monthly/hourly price
+7. Select the offering → Set Quantity: **1**
+8. Click **Add to Cart** → **Purchase**
+
+> Note: The RI is tied to the instance type and region, NOT to a specific EC2 instance. As long as you have a t3.small running in ap-southeast-2, the discount applies automatically. You don't need to do anything special to "connect" the RI to your instance.
+
+---
+
+### How to Purchase RDS Reserved Instance
+
+**AWS Console UI Steps:**
+
+1. Go to AWS Console → Search **RDS** → Click it
+2. In the left sidebar, click **Reserved Instances**
+3. Click **Purchase Reserved DB Instance**
+4. Fill in:
+   - DB Engine: **postgresql**
+   - DB Instance Class: **db.t3.micro**
+   - Multi-AZ: **No** (single-AZ is what we set up)
+   - Term: **1 year**
+   - Offering Type: **No Upfront**
+5. Click **Submit**
+6. Review pricing → **Purchase**
+
+> Same as EC2 — the discount auto-applies to your existing RDS instance. No restart or migration needed.
+
+---
+
+### Important Rules About Reserved Instances
+
+1. **Non-refundable** — Once purchased, you pay for the full term even if you delete your server. (You can sell unused RIs on the AWS Marketplace, but it's a hassle.)
+
+2. **Same specs only** — If you buy a t3.small RI and later upgrade to t3.medium, the RI discount no longer applies. You'd be paying for both the unused RI AND the new on-demand instance.
+
+3. **Region-locked** — An RI for ap-southeast-2 won't apply to an instance in us-east-1.
+
+4. **Auto-applies** — You don't need to "attach" the RI to anything. As long as a matching instance is running, AWS automatically applies the discounted rate to your bill.
+
+5. **Convertible RIs** (more expensive, more flexible) — Can be exchanged for different instance types. Only worth it if you expect to resize frequently.
+
+---
+
+### Quick Summary
+
+| Question | Answer |
+|----------|--------|
+| Do I need to restart my server? | No. Nothing changes on the server. |
+| Do I need to reconfigure anything? | No. It's purely a billing change. |
+| Can I cancel? | No. You're committed for 1 or 3 years. |
+| When does the discount start? | Immediately after purchase. |
+| What if my server is off? | You still pay. RI = reservation, not usage-based. |
+| Should I buy it on Day 1? | No. Wait 1-2 months to confirm everything is stable first. |

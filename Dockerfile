@@ -29,7 +29,9 @@ FROM base AS production
 ENV NODE_ENV=production
 COPY --from=deps /prod_node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY package.json ./
+COPY --from=build /app/src/database ./src/database
+COPY --from=build /app/.sequelizerc ./
+COPY --from=build /app/package.json ./
 
 RUN mkdir -p uploads logs && \
     chown -R node:node /app
