@@ -9,6 +9,7 @@ import { reviewRoutes } from '../../modules/review';
 import { favouriteRoutes } from '../../modules/favourite';
 import { aiClassifierRoutes } from '../../modules/ai-classifier';
 import { helpDeskRoutes } from '../../modules/help-desk';
+import { invoiceRoutes } from '../../modules/invoice';
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use('/reviews', reviewRoutes);
 router.use('/favourites', favouriteRoutes);
 router.use('/ai', aiClassifierRoutes);
 router.use('/help-desk', helpDeskRoutes);
+router.use('/invoices', invoiceRoutes);
 
 export default router;

@@ -11,6 +11,23 @@ import { env } from '../../config/env';
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+/**
+ * Multipart bodies arrive as strings, so booleans and numbers need coercing
+ * before they reach Sequelize. Both fall back when the value is absent or junk.
+ */
+function toBool(value: boolean | string | undefined, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
+function toInt(value: number | string | undefined, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+  return fallback;
+}
+
 function computeIsOpen(profile: TradieProfile): boolean {
   const { openDays, timeFrom, timeTo } = profile;
   if (!openDays || !timeFrom || !timeTo) return false;
@@ -245,11 +262,15 @@ export class TradieService {
         isEmergencyAvailable: dto.isEmergencyAvailable ?? false,
         introVideoUrl: dto.businessVideoUrl,
         businessImages: dto.businessImageUrl ? [dto.businessImageUrl] : [],
-        yearsOfExperience: 0,
+        yearsOfExperience: toInt(dto.yearsOfExperience, 0),
+        isAvailable: toBool(dto.isAvailable, true),
         termsAcceptedAt: new Date(),
         hasLicense: !!dto.licenseNumber,
         licenseNumber: dto.licenseNumber || null,
         licenseExpiryDate: dto.licenseExpiryDate ? new Date(dto.licenseExpiryDate) : null,
+        tradeLicenseUrl: dto.tradeLicenseUrl || null,
+        publicLiabilityInsuranceUrl: dto.publicLiabilityInsuranceUrl || null,
+        idProofUrl: dto.idProofUrl || null,
         profileStatus: ProfileStatus.APPROVED,
       });
       await this.repo.setServices(profile.id, categoryIds);
@@ -279,6 +300,18 @@ export class TradieService {
         const current = existing.businessImages || [];
         updateData.businessImages = [...current, dto.businessImageUrl];
       }
+      // Only overwrite a document when a replacement was actually uploaded.
+      if (dto.yearsOfExperience !== undefined) {
+        updateData.yearsOfExperience = toInt(dto.yearsOfExperience, existing.yearsOfExperience);
+      }
+      if (dto.isAvailable !== undefined) {
+        updateData.isAvailable = toBool(dto.isAvailable, existing.isAvailable);
+      }
+      if (dto.tradeLicenseUrl) updateData.tradeLicenseUrl = dto.tradeLicenseUrl;
+      if (dto.publicLiabilityInsuranceUrl) {
+        updateData.publicLiabilityInsuranceUrl = dto.publicLiabilityInsuranceUrl;
+      }
+      if (dto.idProofUrl) updateData.idProofUrl = dto.idProofUrl;
       await this.repo.update(existing.id, updateData);
       await this.repo.setServices(existing.id, categoryIds);
       await this.repo.setRegions(existing.id, regionIds);

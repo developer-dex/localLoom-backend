@@ -87,6 +87,15 @@ export class TradieController {
         businessVideoUrl: files?.businessVideo?.[0]
           ? getFileUrl('businessDetails', files.businessVideo[0].filename)
           : undefined,
+        tradeLicenseUrl: files?.tradeLicense?.[0]
+          ? getFileUrl('businessDetails', files.tradeLicense[0].filename)
+          : undefined,
+        publicLiabilityInsuranceUrl: files?.publicLiabilityInsurance?.[0]
+          ? getFileUrl('businessDetails', files.publicLiabilityInsurance[0].filename)
+          : undefined,
+        idProofUrl: files?.idProof?.[0]
+          ? getFileUrl('businessDetails', files.idProof[0].filename)
+          : undefined,
       };
 
       const profile = await this.tradieService.setupProfile(userId, role, dto);

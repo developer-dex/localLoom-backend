@@ -33,6 +33,11 @@ export const setupTradieProfileSchema = Joi.object({
     }),
   ).optional(),
   isEmergencyAvailable: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
+  // Multipart sends everything as strings, so accept both forms and coerce later.
+  isAvailable: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
+  yearsOfExperience: Joi.alternatives()
+    .try(Joi.number().integer().min(0).max(99), Joi.string().pattern(/^\d{1,2}$/))
+    .optional(),
   abn: Joi.string().trim().min(9).max(20).required(),
   abnData: Joi.alternatives().try(
     Joi.object({

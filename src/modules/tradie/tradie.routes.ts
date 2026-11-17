@@ -33,6 +33,11 @@ const uploadProfileSetup = multer({
 }).fields([
   { name: 'businessImage', maxCount: 1 },
   { name: 'businessVideo', maxCount: 1 },
+  // Verification documents — persisted to the trade_license_url,
+  // public_liability_insurance_url and id_proof_url columns.
+  { name: 'tradeLicense', maxCount: 1 },
+  { name: 'publicLiabilityInsurance', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
 ]);
 
 // Work photos multer

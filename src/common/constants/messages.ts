@@ -128,6 +128,28 @@ export const REPORT_MESSAGES = {
   NOT_FOUND: 'Report not found',
 } as const;
 
+export const INVOICE_MESSAGES = {
+  CREATED: 'Invoice created successfully',
+  UPDATED: 'Invoice updated successfully',
+  FETCHED: 'Invoice fetched successfully',
+  LIST_FETCHED: 'Invoices fetched successfully',
+  DELETED: 'Invoice deleted successfully',
+  SENT: 'Invoice sent successfully',
+  MARKED_SENT: 'Invoice marked as sent',
+  MARKED_PAID: 'Invoice marked as paid',
+  CLIENTS_FETCHED: 'Clients fetched successfully',
+  DRAFT_GENERATED: 'Invoice draft generated successfully',
+  NOT_FOUND: 'Invoice not found',
+  TRADIE_REQUIRED: 'Only approved service providers can create invoices',
+  NOT_EDITABLE: 'Paid or void invoices can no longer be edited',
+  ONLY_DRAFT_DELETABLE: 'Only draft invoices can be deleted',
+  NO_LINE_ITEMS: 'Add at least one line item before sending',
+  CLIENT_REQUIRED: 'Add the client name before sending',
+  CUSTOM_DATE_REQUIRED: 'Choose the issue date before sending',
+  NOT_SENT: 'Only sent invoices can be marked as paid',
+  EMAIL_FAILED: 'Invoice saved, but the email could not be delivered. Please try again',
+} as const;
+
 export const COMMON_MESSAGES = {
   SUCCESS: 'Operation successful',
   CREATED: 'Resource created successfully',

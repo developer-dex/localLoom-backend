@@ -634,6 +634,7 @@ docker run -d \
   --env-file .env \
   -v /opt/localloom/uploads:/app/uploads \
   -v /opt/localloom/logs:/app/logs \
+  -v /opt/localloom/public:/app/public \
   ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/localloom-backend:latest
 ```
 
@@ -950,6 +951,7 @@ docker run -d \
   --env-file .env \
   -v /opt/localloom/uploads:/app/uploads \
   -v /opt/localloom/logs:/app/logs \
+  -v /opt/localloom/public:/app/public \
   ${ACCOUNT_ID}.dkr.ecr.ap-southeast-2.amazonaws.com/localloom-backend:latest
 
 # 3. Run migrations if needed

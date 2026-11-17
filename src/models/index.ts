@@ -17,6 +17,8 @@ import { Conversation } from './conversation.model';
 import { Message } from './message.model';
 import { Report } from './report.model';
 import { HelpDeskRequest } from './help-desk-request.model';
+import { Invoice } from './invoice.model';
+import { InvoiceLineItem } from './invoice-line-item.model';
 
 // ═══════════════════════════════════════════
 // ASSOCIATIONS
@@ -91,6 +93,13 @@ User.hasMany(ContactLog, { foreignKey: 'customerId', as: 'contactLogs' });
 // ── User (1) ↔ (N) Review (as customer) ──
 User.hasMany(Review, { foreignKey: 'customerId', as: 'reviews' });
 
+// ── TradieProfile (1) ↔ (N) Invoice ↔ (N) InvoiceLineItem ──
+TradieProfile.hasMany(Invoice, { foreignKey: 'tradieProfileId', as: 'invoices' });
+Invoice.belongsTo(TradieProfile, { foreignKey: 'tradieProfileId', as: 'tradieProfile' });
+Invoice.belongsTo(User, { foreignKey: 'clientUserId', as: 'clientUser' });
+Invoice.hasMany(InvoiceLineItem, { foreignKey: 'invoiceId', as: 'lineItems', onDelete: 'CASCADE' });
+InvoiceLineItem.belongsTo(Invoice, { foreignKey: 'invoiceId' });
+
 // ═══════════════════════════════════════════
 // EXPORTS
 // ═══════════════════════════════════════════
@@ -151,3 +160,16 @@ export type { IReportAttributes, IReportCreationAttributes } from './report.mode
 
 export { HelpDeskRequest } from './help-desk-request.model';
 export type { IHelpDeskRequestAttributes, IHelpDeskRequestCreationAttributes } from './help-desk-request.model';
+
+export { Invoice } from './invoice.model';
+export type {
+  IInvoiceAttributes,
+  IInvoiceCreationAttributes,
+  InvoiceStatus,
+  InvoiceIssueDateMode,
+  InvoiceDiscountType,
+  InvoicePaymentTerms,
+} from './invoice.model';
+
+export { InvoiceLineItem } from './invoice-line-item.model';
+export type { IInvoiceLineItemAttributes, IInvoiceLineItemCreationAttributes } from './invoice-line-item.model';

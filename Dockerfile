@@ -32,8 +32,10 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/database ./src/database
 COPY --from=build /app/.sequelizerc ./
 COPY --from=build /app/package.json ./
+COPY docker-entrypoint.sh ./
 
 RUN mkdir -p uploads logs && \
+    chmod +x docker-entrypoint.sh && \
     chown -R node:node /app
 
 USER node
@@ -44,4 +46,4 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD wget -qO- http://localhost:5000/health || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/server.js"]
+CMD ["./docker-entrypoint.sh"]

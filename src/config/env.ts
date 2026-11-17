@@ -76,6 +76,8 @@ const envSchema = Joi.object({
   AI_MODE: Joi.string().valid('development', 'production').default('development'),
   ANTHROPIC_API_KEY: Joi.string().allow('').default(''),
   ANTHROPIC_CLASSIFIER_MODEL: Joi.string().default('claude-haiku-4-5'),
+  ANTHROPIC_INVOICE_MODEL: Joi.string().default('claude-opus-5-5'),
+  AI_INVOICE_TIMEOUT_MS: Joi.number().integer().min(1).default(60000),
   AI_CLASSIFIER_MAX_TOKENS: Joi.number().integer().min(1).default(256),
   AI_CLASSIFIER_TEMPERATURE: Joi.number().min(0).max(1).default(0),
   AI_CLASSIFIER_TIMEOUT_MS: Joi.number().integer().min(1).default(15000),
@@ -172,5 +174,10 @@ export const env = {
     rateLimitWindowMs: envVars.AI_CLASSIFIER_RATE_LIMIT_WINDOW_MS as number,
     catalogCacheTtlMs: envVars.AI_CLASSIFIER_CATALOG_CACHE_TTL_MS as number,
     debugLogPrompt: envVars.AI_CLASSIFIER_DEBUG_LOG_PROMPT as boolean,
+  },
+
+  aiInvoice: {
+    model: envVars.ANTHROPIC_INVOICE_MODEL as string,
+    timeoutMs: envVars.AI_INVOICE_TIMEOUT_MS as number,
   },
 };

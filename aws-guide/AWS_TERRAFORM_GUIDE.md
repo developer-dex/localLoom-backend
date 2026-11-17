@@ -754,6 +754,7 @@ docker run -d \
   --env-file .env \
   -v /opt/localloom/uploads:/app/uploads \
   -v /opt/localloom/logs:/app/logs \
+  -v /opt/localloom/public:/app/public \
   ${ecr_repo_url}:latest
 ```
 
@@ -914,6 +915,7 @@ docker run -d \
   --env-file .env \
   -v /opt/localloom/uploads:/app/uploads \
   -v /opt/localloom/logs:/app/logs \
+  -v /opt/localloom/public:/app/public \
   ${ECR_URL}:latest
 
 # Run migrations if needed

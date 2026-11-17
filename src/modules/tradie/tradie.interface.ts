@@ -15,6 +15,8 @@ export interface SetupTradieProfileDto {
   timeTo?: string;
   openDays?: string[];
   isEmergencyAvailable?: boolean;
+  isAvailable?: boolean | string;
+  yearsOfExperience?: number | string;
   abn: string;
   abnData?: AbnData;
   licenseNumber?: string;
@@ -22,6 +24,9 @@ export interface SetupTradieProfileDto {
   // resolved from uploaded files
   businessImageUrl?: string;
   businessVideoUrl?: string;
+  tradeLicenseUrl?: string;
+  publicLiabilityInsuranceUrl?: string;
+  idProofUrl?: string;
 }
 
 // Kept for internal use / backwards compat
